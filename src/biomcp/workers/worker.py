@@ -75,11 +75,7 @@ async def handle_root_mcp_request(request: Request):
         )
 
 
-# Keep the /mcp endpoint for backward compatibility
-@app.post("/mcp")
-async def handle_mcp_endpoint(request: Request):
-    """Handle MCP protocol messages at the /mcp endpoint."""
-    return await handle_root_mcp_request(request)
+# The /mcp endpoint is now handled by FastMCP's built-in streamable_http_path
 
 
 # Add the SSE endpoint
