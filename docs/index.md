@@ -1,201 +1,250 @@
-# BioMCP: Biomedical Model Context Protocol Server
+# BioMCP: AI-Powered Biomedical Research
 
 [![Release](https://img.shields.io/github/v/tag/genomoncology/biomcp)](https://github.com/genomoncology/biomcp/tags)
 [![Build status](https://img.shields.io/github/actions/workflow/status/genomoncology/biomcp/main.yml?branch=main)](https://github.com/genomoncology/biomcp/actions/workflows/main.yml?query=branch%3Amain)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/genomoncology/biomcp)](https://img.shields.io/github/commit-activity/m/genomoncology/biomcp)
 [![License](https://img.shields.io/github/license/genomoncology/biomcp)](https://img.shields.io/github/license/genomoncology/biomcp)
 
-BioMCP is a specialized Model Context Protocol (MCP) server that connects AI assistants like Claude to biomedical data sources, including ClinicalTrials.gov, PubMed, MyVariant.info, and cBioPortal.
+**Transform how you search and analyze biomedical data** with BioMCP - a powerful tool that connects AI assistants and researchers to critical biomedical databases through natural language.
 
 ### Built and Maintained by <a href="https://www.genomoncology.com"><img src="./assets/logo.png" width=200 valign="middle" /></a>
 
-## Quick Start: Claude Desktop Setup
+<div class="announcement-banner">
+  <div class="announcement-content">
+    <h2>
+      <span class="badge-new">NEW</span>
+      Remote BioMCP Now Available!
+    </h2>
+    <p>Connect to BioMCP instantly through Claude - no installation required!</p>
 
-The fastest way to get started with BioMCP is to set it up with Claude Desktop:
+    <div class="announcement-features">
+      <div class="feature-item">
+        <strong>🚀 Instant Access</strong>
+        <span>Start using BioMCP in under 2 minutes</span>
+      </div>
+      <div class="feature-item">
+        <strong>☁️ Cloud-Powered</strong>
+        <span>Always up-to-date with latest features</span>
+      </div>
+      <div class="feature-item">
+        <strong>🔒 Secure Auth</strong>
+        <span>Google OAuth authentication</span>
+      </div>
+      <div class="feature-item">
+        <strong>🛠️ 23+ Tools</strong>
+        <span>Full suite of biomedical research tools</span>
+      </div>
+    </div>
 
-1. **Install Claude Desktop** from [Anthropic](https://claude.ai/desktop)
+    <a href="tutorials/remote-connection/" class="cta-button">
+      Connect to Remote BioMCP Now
+    </a>
 
-2. **Ensure `uv` is installed**:
+  </div>
+</div>
 
-   ```bash
-   # Install uv if you don't have it
-   # MacOS: brew install uv
-   # Windows: pip install uv
-   ```
+## What Can You Do with BioMCP?
 
-3. **Configure Claude Desktop**:
+### Search Research Literature
 
-   - Open Claude Desktop settings
-   - Navigate to Developer section
-   - Click "Edit Config" and add:
-
-   ```json
-   {
-     "mcpServers": {
-       "biomcp": {
-         "command": "uv",
-         "args": ["run", "--with", "biomcp-python", "biomcp", "run"]
-       }
-     }
-   }
-   ```
-
-   - Save and restart Claude Desktop
-
-4. **Start chatting with Claude** about biomedical topics!
-
-For detailed setup instructions and examples, see our [Claude Desktop Tutorial](tutorials/claude-desktop.md).
-
-## What is BioMCP?
-
-BioMCP is a specialized MCP (Model Context Protocol) server that bridges the gap between AI systems and critical biomedical data sources. While Large Language Models (LLMs) like Claude have extensive general knowledge, they often lack real-time access to specialized databases needed for in-depth biomedical research.
-
-Using the Model Context Protocol, BioMCP provides Claude and other AI assistants with structured, real-time access to:
-
-1. **Clinical Trials** - Searchable access to ClinicalTrials.gov for finding relevant studies
-2. **Research Literature** - Query PubMed/PubTator3 for the latest biomedical research with automatic cBioPortal cancer genomics integration
-3. **Genomic Variants** - Explore detailed genetic variant information from MyVariant.info
-4. **Cancer Genomics** - Automatic integration with cBioPortal for mutation occurrence data in cancer studies
-
-Through MCP, AI assistants can seamlessly invoke BioMCP tools during conversations, retrieving precise biomedical information without the user needing to understand complex query syntax or database-specific parameters.
-
-## MCP Tools and Capabilities
-
-BioMCP provides 24 specialized tools through the MCP interface:
-
-### Core Tools (3)
-
-#### Think Tool (CRITICAL - ALWAYS USE FIRST!)
-
-- `think`: A sequential thinking tool for systematic analysis of biomedical problems. **MUST be used BEFORE any search operations** to ensure comprehensive research planning and analysis.
-
-#### Unified Tools
-
-- `search`: Powerful unified search across all biomedical data sources with cross-domain query support
-- `fetch`: Retrieve detailed information for specific articles, trials, or variants
-
-### Individual Tools (21)
-
-#### Article Tools (2)
-
-- `article_searcher`: Search PubMed/PubTator3 and preprints with automatic cBioPortal integration
-- `article_getter`: Fetch detailed article content and metadata
-
-**Note**: When searching articles with gene parameters, cBioPortal data is automatically included, providing:
-
-- Gene-level mutation summaries across cancer studies
-- Mutation-specific search capabilities (e.g., BRAF V600E)
-- Dynamic cancer type categorization
-
-**NEW: OR Logic for Keywords**: The article searcher now supports OR logic using pipe separators in keywords:
-
-- `"R173|Arg173|p.R173"` finds articles with any variant notation
-- `"immunotherapy|checkpoint inhibitor"` matches either term
-- Multiple keywords are still combined with AND logic
-
-#### Clinical Trial Tools (5)
-
-- `trial_searcher`: Search for trials by condition, intervention, location, phase, etc.
-- `trial_getter`: Fetch all details for a specific trial
-- `trial_protocol_getter`: Get protocol information only
-- `trial_references_getter`: Find publications related to trials
-- `trial_outcomes_getter`: Access trial results and outcome data
-- `trial_locations_getter`: Find where trials are conducted
-
-#### Genomic Variant Tools (3)
-
-- `variant_searcher`: Search MyVariant.info with clinical and functional filters
-- `variant_getter`: Get comprehensive annotations including TCGA, 1000 Genomes, and cBioPortal data
-- `alphagenome_predictor`: Predict variant effects on gene regulation using Google DeepMind's AlphaGenome
-
-#### NCI-Specific Tools (6)
-
-- `nci_organization_searcher`: Search NCI's organization database for cancer centers and research facilities
-- `nci_organization_getter`: Get detailed information about specific organizations
-- `nci_intervention_searcher`: Search NCI's intervention database for drugs, devices, and procedures
-- `nci_intervention_getter`: Get detailed information about specific interventions
-- `nci_biomarker_searcher`: Search biomarkers used in trial eligibility criteria
-- `nci_disease_searcher`: Search NCI's controlled vocabulary of cancer conditions
-
-#### BioThings Tools (3)
-
-- `gene_getter`: Get real-time gene information from MyGene.info
-- `disease_getter`: Get disease definitions and synonyms from MyDisease.info
-- `drug_getter`: Get drug/chemical information from MyChem.info
-
-## MCP Resources
-
-BioMCP provides the following resources through the MCP interface:
-
-### Instructions Resource
-
-- `get_instructions`: Returns operational instructions and guidelines for effective use of BioMCP tools. This resource helps AI assistants understand best practices for biomedical research tasks.
-
-### Researcher Persona Resource
-
-- `get_researcher`: Provides a detailed biomedical researcher persona with extensive expertise across multiple domains. This persona helps AI assistants adopt appropriate research methodologies and communication styles for biomedical tasks.
-
-## Tutorials
-
-### Getting Started
-
-- [**Claude Desktop Tutorial**](tutorials/claude-desktop.md) - Set up and use BioMCP with Claude Desktop
-- [**MCP Inspector Tutorial**](tutorials/mcp-inspector.md) - Test and debug BioMCP directly
-- [**Python SDK Tutorial**](tutorials/python-sdk.md) - Use BioMCP as a Python library
-- [**MCP Client Tutorial**](tutorials/mcp-client.md) - Integrate with MCP clients programmatically
-
-### Advanced Features
-
-- [**AlphaGenome Setup Guide**](tutorials/alphagenome-setup.md) - Configure Google DeepMind's AlphaGenome for variant effect prediction
-- [**AlphaGenome Prompt Examples**](tutorials/alphagenome-prompts.md) - Example prompts and workflows for variant analysis with AI
-- [**AlphaGenome with Docker**](tutorials/docker-alphagenome.md) - Run AlphaGenome in Docker containers
-
-### Example Prompts
-
-- [**BioThings Prompt Examples**](tutorials/biothings-prompts.md) - Example prompts for gene, disease, and drug information retrieval
-- [**NCI Tools Prompt Examples**](tutorials/nci-prompts.md) - Example prompts for NCI organization and intervention searches
-
-## Verification and Testing
-
-The easiest way to test your BioMCP setup is with the MCP Inspector:
+Find articles about genes, variants, diseases, and drugs with automatic cancer genomics data from cBioPortal
 
 ```bash
-npx @modelcontextprotocol/inspector uv run --with biomcp-python biomcp run
+biomcp article search --gene BRAF --disease melanoma
 ```
 
-This launches a web interface where you can test each BioMCP tool directly. For detailed instructions, see the [MCP Inspector Tutorial](tutorials/mcp-inspector.md).
+### Discover Clinical Trials
 
-## Additional Usage Options
-
-While BioMCP is primarily designed as an MCP server for AI assistants, it can also be used in other ways:
-
-### Command Line Interface
-
-BioMCP includes a comprehensive CLI for direct interaction with biomedical databases:
+Search active trials by condition, location, phase, and eligibility criteria including genetic biomarkers
 
 ```bash
-# Examples of CLI usage
-biomcp trial search --condition "Melanoma" --phase PHASE3
-biomcp article search --gene BRAF --disease Melanoma  # Includes cBioPortal data
-biomcp article search --gene BRAF --keyword V600E     # Mutation-specific search
+biomcp trial search --condition "lung cancer" --status RECRUITING
+```
+
+### Analyze Genetic Variants
+
+Query variant databases, predict effects, and understand clinical significance
+
+```bash
 biomcp variant search --gene TP53 --significance pathogenic
 ```
 
-### Python SDK
+### AI-Powered Analysis
 
-For programmatic access, BioMCP can be used as a Python library:
+Use with Claude Desktop for conversational biomedical research with sequential thinking
 
-```bash
-# Install the package
-pip install biomcp-python
+```python
+# Claude automatically uses BioMCP tools
+"What BRAF mutations are found in melanoma?"
 ```
 
-See the [Python SDK Tutorial](tutorials/python-sdk.md) for code examples.
+## 5-Minute Quick Start
 
-### MCP Client Integration
+### Choose Your Interface
 
-For developers building MCP-compatible applications, BioMCP can be integrated using the MCP client libraries. See the [MCP Client Tutorial](tutorials/mcp-client.md) for details.
+=== "Claude Desktop (Recommended)"
+
+    **Best for**: Conversational research, complex queries, AI-assisted analysis
+
+    1. **Install Claude Desktop** from [claude.ai/desktop](https://claude.ai/desktop)
+
+    2. **Configure BioMCP**:
+       ```json
+       {
+         "mcpServers": {
+           "biomcp": {
+             "command": "uv",
+             "args": [
+        "run", "--with", "biomcp-python",
+        "biomcp", "run"
+      ]
+           }
+         }
+       }
+       ```
+
+    3. **Start researching**: Ask Claude about any biomedical topic!
+
+    [Full Claude Desktop Guide →](getting-started/02-claude-desktop-integration.md)
+
+=== "Command Line"
+
+    **Best for**: Direct queries, scripting, automation
+
+    1. **Install BioMCP**:
+       ```bash
+       # Using uv (recommended)
+       uv tool install biomcp
+
+       # Or using pip
+       pip install biomcp-python
+       ```
+
+    2. **Run your first search**:
+       ```bash
+       biomcp article search \
+         --gene BRAF --disease melanoma \
+         --limit 5
+       ```
+
+    [CLI Reference →](user-guides/01-command-line-interface.md)
+
+=== "Python SDK"
+
+    **Best for**: Integration, custom applications, bulk operations
+
+    1. **Install the package**:
+       ```bash
+       pip install biomcp-python
+       ```
+
+    2. **Use in your code**:
+       ```python
+       from biomcp import BioMCPClient
+
+       async with BioMCPClient() as client:
+           articles = await client.articles.search(
+               genes=["BRAF"],
+               diseases=["melanoma"]
+           )
+       ```
+
+    [Python SDK Docs →](apis/python-sdk.md)
+
+## Key Features
+
+### Unified Search Across Databases
+
+- **PubMed/PubTator3**: 30M+ research articles with entity recognition
+- **ClinicalTrials.gov**: 400K+ clinical trials worldwide
+- **MyVariant.info**: Comprehensive variant annotations
+- **cBioPortal**: Automatic cancer genomics integration
+
+### Intelligent Query Processing
+
+- Natural language to structured queries
+- Automatic synonym expansion
+- OR logic support for flexible matching
+- Cross-domain relationship discovery
+
+### Built for AI Integration
+
+- 24 specialized MCP tools
+- Sequential thinking for complex analysis
+- Streaming responses for real-time updates
+- Context preservation across queries
+
+[Explore All Features →](concepts/01-what-is-biomcp.md)
+
+## Learn by Example
+
+### Find Articles About a Specific Mutation
+
+```bash
+# Search for BRAF V600E mutations
+biomcp article search --gene BRAF \
+  --keyword "V600E|p.V600E|c.1799T>A"
+```
+
+### Discover Trials Near You
+
+```bash
+# Find cancer trials in Boston area
+biomcp trial search --condition cancer \
+  --latitude 42.3601 --longitude -71.0589 \
+  --distance 50
+```
+
+### Get Gene Information
+
+```bash
+# Get comprehensive gene data
+biomcp gene get TP53
+```
+
+[More Examples →](tutorials/biothings-prompts.md)
+
+## Popular Workflows
+
+### Literature Review
+
+Systematic search across papers, preprints, and clinical trials
+[Workflow Guide →](workflows/all-workflows.md#1-literature-review-workflow)
+
+### Variant Interpretation
+
+From variant ID to clinical significance and treatment implications
+[Workflow Guide →](workflows/all-workflows.md#3-variant-interpretation-workflow)
+
+### Trial Matching
+
+Find eligible trials based on patient criteria and biomarkers
+[Workflow Guide →](workflows/all-workflows.md#2-clinical-trial-matching-workflow)
+
+### Drug Research
+
+Connect drugs to targets, trials, and research literature
+[Workflow Guide →](workflows/all-workflows.md)
+
+## Advanced Features
+
+- **[NCI Integration](getting-started/03-authentication-and-api-keys.md#nci-clinical-trials-api)**: Enhanced cancer trial search with biomarker filtering
+- **[AlphaGenome](how-to-guides/04-predict-variant-effects-with-alphagenome.md)**: Predict variant effects on gene regulation
+- **[BigQuery Logging](how-to-guides/05-logging-and-monitoring-with-bigquery.md)**: Monitor usage and performance
+- **[HTTP Server Mode](developer-guides/01-server-deployment.md)**: Deploy as a service
+
+## Documentation
+
+- **[Getting Started](getting-started/01-quickstart-cli.md)** - Installation and first steps
+- **[User Guides](user-guides/01-command-line-interface.md)** - Detailed usage instructions
+- **[API Reference](apis/overview.md)** - Technical documentation
+- **[FAQ](faq-condensed.md)** - Quick answers to common questions
+
+## Community & Support
+
+- **GitHub**: [github.com/genomoncology/biomcp](https://github.com/genomoncology/biomcp)
+- **Issues**: [Report bugs or request features](https://github.com/genomoncology/biomcp/issues)
+- **Discussions**: [Ask questions and share tips](https://github.com/genomoncology/biomcp/discussions)
 
 ## License
 
-BioMCP is licensed under the MIT License.
+BioMCP is licensed under the MIT License. See [LICENSE](https://github.com/genomoncology/biomcp/blob/main/LICENSE) for details.
