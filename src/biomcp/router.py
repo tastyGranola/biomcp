@@ -124,7 +124,7 @@ async def search(  # noqa: C901
     query: Annotated[
         str,
         "Unified search query (e.g., 'gene:BRAF AND trials.condition:melanoma'). If provided, other parameters are ignored.",
-    ],
+    ] = None,
     call_benefit: Annotated[
         str | None,
         Field(
@@ -167,7 +167,18 @@ async def search(  # noqa: C901
     recruiting_status: Annotated[
         str | None, "Trial status filter (OPEN, CLOSED, or ANY)"
     ] = None,
-    phase: Annotated[str | None, "Trial phase filter"] = None,
+    phase: Annotated[
+        Literal[
+            "EARLY_PHASE1",
+            "PHASE1",
+            "PHASE2",
+            "PHASE3",
+            "PHASE4",
+            "NOT_APPLICABLE",
+        ]
+        | None,
+        Field(description="Filter by clinical trial phase"),
+    ] = None,
     significance: Annotated[
         str | None, "Variant clinical significance"
     ] = None,
