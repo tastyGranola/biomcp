@@ -140,7 +140,12 @@ class QueryRouter:
         if "intervention" in trial_fields:
             mapping["interventions"] = [trial_fields["intervention"]]
         if "phase" in trial_fields:
-            mapping["phase"] = f"PHASE{trial_fields['phase']}"
+            phase_value = trial_fields['phase']
+            # Don't add PHASE prefix if it's already there
+            if phase_value.upper().startswith("PHASE"):
+                mapping["phase"] = phase_value
+            else:
+                mapping["phase"] = f"PHASE{phase_value}"
         if "status" in trial_fields:
             mapping["recruiting_status"] = trial_fields["status"].upper()
 

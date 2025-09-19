@@ -397,11 +397,22 @@ class QueryParser:
         tokens = []
         current_token = ""
         in_quotes = False
+        paren_depth = 0
 
         for char in query:
             if char == '"':
                 in_quotes = not in_quotes
                 current_token += char
+            elif char == '(' and not in_quotes:
+                paren_depth += 1
+                # Don't add opening parenthesis to token
+            elif char == ')' and not in_quotes:
+                paren_depth -= 1
+                # Don't add closing parenthesis to token
+                # Complete the current token if we're at the end of a parenthesized expression
+                if current_token and paren_depth == 0:
+                    tokens.append(current_token)
+                    current_token = ""
             elif char == " " and not in_quotes:
                 if current_token:
                     tokens.append(current_token)
