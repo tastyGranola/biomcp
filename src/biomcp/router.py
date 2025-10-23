@@ -120,7 +120,7 @@ def format_results(
 # ────────────────────────────
 @mcp_app.tool()
 @track_performance("biomcp.search")
-async def search(  # noqa: C901
+async def biodomain_search(  # noqa: C901
     query: Annotated[
         str,
         "Unified search query (e.g., 'gene:BRAF AND trials.condition:melanoma'). If provided, other parameters are ignored.",
@@ -226,7 +226,7 @@ async def search(  # noqa: C901
 # ────────────────────────────
 @mcp_app.tool()
 @track_performance("biomcp.fetch")
-async def fetch(  # noqa: C901
+async def biodomain_fetch(  # noqa: C901
     id: Annotated[  # noqa: A002
         str,
         "PMID / NCT ID / Variant ID / DOI / Gene ID / Drug ID / Disease ID / NCI Organization ID / NCI Intervention ID / NCI Disease ID / FDA Report ID / FDA Set ID / FDA MDR Key / FDA Application Number / FDA Recall Number",
