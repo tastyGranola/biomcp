@@ -92,7 +92,7 @@ MAX_AUTOCOMPLETE_LIMIT = 100
 
 # Text display
 MAX_WIDTH = 72  # Maximum width for text wrapping in console output
-SNIPPET_LENGTH = 200  # Maximum length for text snippets in search results
+SNIPPET_LENGTH = 3000  # Maximum length for text snippets in search results
 
 # Rate Limiting
 DEFAULT_RATE_LIMIT_PER_SECOND = 10.0
