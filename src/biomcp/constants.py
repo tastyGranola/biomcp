@@ -82,7 +82,7 @@ DEFAULT_PAGE_NUMBER = 1
 
 # Search limits
 MAX_RESULTS_PER_DOMAIN_DEFAULT = (
-    10  # Default max results per domain in unified search
+    4  # Default max results per domain in unified search
 )
 ESTIMATED_ADDITIONAL_RESULTS = (
     100  # Estimate for additional results when full page returned
