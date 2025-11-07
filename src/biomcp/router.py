@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from biomcp.constants import (
     DEFAULT_PAGE_NUMBER,
@@ -117,96 +117,98 @@ def format_results(
 
 # ────────────────────────────
 # Unified SEARCH tool
+class BioDomainSearchInput(BaseModel):
+    """Input schema for biomedical literature and clinical trial searches."""
+
+    query: str = Field(
+        description=(
+            "MANDATORY FIELD-BASED QUERY SYNTAX. Query MUST contain field prefixes (disease:, gene:, chemical:, trials.) or it will return ZERO results.\n\n"
+            "✅ CORRECT EXAMPLES:\n"
+            "- disease:\"mild cognitive impairment\" AND \"multicenter trial\" AND recruitment\n"
+            "- gene:BRAF AND disease:melanoma AND (resistance OR resistant)\n"
+            "- chemical:pembrolizumab AND trials.phase:3\n"
+            "- trials.condition:diabetes AND trials.intervention:metformin\n\n"
+            "❌ WRONG (will return NO results):\n"
+            "- \"regulatory compliance AND multi-center trials\" ← Missing disease: prefix\n"
+            "- \"BRAF mutations in melanoma\" ← Missing gene: prefix\n\n"
+            "REQUIRED SYNTAX RULES:\n"
+            "1. Start with field prefix: disease:, gene:, chemical:, drug:, or trials.\n"
+            "2. Quote multi-word phrases: disease:\"mild cognitive impairment\" not disease:mild cognitive impairment\n"
+            "3. Use uppercase AND/OR: disease:MCI AND recruitment, not disease:MCI and recruitment\n"
+            "4. Keep focused (3-5 concepts): Avoid 7+ AND terms\n\n"
+            "FIELD PREFIX REFERENCE:\n"
+            "- disease:NAME - For disease/condition research (e.g., disease:MCI, disease:\"Alzheimer's disease\")\n"
+            "- gene:SYMBOL - For gene research (e.g., gene:BRAF, gene:TP53)\n"
+            "- chemical:NAME or drug:NAME - For drug research (e.g., chemical:pembrolizumab)\n"
+            "- trials.condition:NAME - For trial condition filters\n"
+            "- trials.intervention:NAME - For trial intervention filters\n"
+            "- trials.phase:N - For trial phase (1, 2, 3, 4)\n"
+            "- articles.date:YYYY-MM-DD..YYYY-MM-DD - For date ranges\n\n"
+            "QUERY TEMPLATES BY SCENARIO:\n"
+            "Multicenter trials: disease:\"[condition]\" AND \"multicenter trial\" AND (\"regulatory compliance\" OR harmonization)\n"
+            "Recruitment challenges: disease:\"[condition]\" AND recruitment AND \"diverse populations\" AND (global OR multinational)\n"
+            "Gene-disease research: gene:[SYMBOL] AND disease:\"[condition]\" AND (mechanism OR pathway)\n"
+            "Drug efficacy: chemical:\"[drug]\" AND disease:\"[condition]\" AND trials.phase:[N]\n\n"
+            "REMEMBER: Without field prefix (disease:, gene:, etc.), query routing fails and returns ZERO results."
+        )
+    )
+
+    api_key: str | None = Field(
+        default=None,
+        description="NCI API key for NCI-specific domain searches. Get free key at: https://clinicaltrialsapi.cancer.gov/"
+    )
+
+
 # ────────────────────────────
 @mcp_app.tool()
 @track_performance("biomcp.search")
 async def biodomain_search(  # noqa: C901
-    query: Annotated[
-        str,
-        "Unified search query (e.g., 'gene:BRAF AND trials.condition:melanoma'). If provided, other parameters are ignored.",
-    ] = None,
-    explain_query: Annotated[
-        bool, "Return query explanation (unified search only)"
-    ] = False,
-    get_schema: Annotated[
-        bool, "Return searchable fields schema instead of results"
-    ] = False,
-    api_key: Annotated[
-        str | None,
-        Field(
-            description="NCI API key for searching NCI domains (nci_organization, nci_intervention, nci_biomarker, nci_disease). Required for NCI searches. Get a free key at: https://clinicaltrialsapi.cancer.gov/"
-        ),
-    ] = None,
-    max_results_per_domain: Annotated[
-        int | None, "Max results per domain (unified search only)"
-    ] = None,
+    query: str,
+    api_key: str | None = None
 ) -> dict:
     """Search biomedical literature, clinical trials, genetic variants, genes, drugs, and diseases.
 
-    ⚠️ IMPORTANT: Have you used the 'think' tool first? If not, STOP and use it NOW!
-    The 'think' tool is REQUIRED for proper research planning and should be your FIRST step.
+    This tool searches across PubMed/PubTator3, ClinicalTrials.gov, MyVariant.info, and BioThings databases.
 
-    This tool provides access to biomedical data from PubMed/PubTator3, ClinicalTrials.gov,
-    MyVariant.info, and the BioThings suite (MyGene.info, MyChem.info, MyDisease.info).
-    It supports two search modes:
+    ⚠️ CRITICAL: Query parameter MUST use field-based syntax (see query field description for details).
+    Queries without field prefixes (disease:, gene:, chemical:, trials.) will return ZERO results.
 
-    ## 1. UNIFIED QUERY LANGUAGE
-    Use the 'query' parameter with field-based syntax for precise cross-domain searches.
-
-    Syntax:
-    - Basic: "gene:BRAF"
-    - AND logic: "gene:BRAF AND disease:melanoma"
-    - OR logic: "gene:PTEN AND (R173 OR Arg173 OR 'position 173')"
-    - Domain-specific: "trials.condition:melanoma AND trials.phase:3"
-
-    Common fields:
-    - Cross-domain: gene, disease, variant, chemical/drug
-    - Articles: pmid, title, abstract, journal, author
-    - Trials: trials.condition, trials.intervention, trials.phase, trials.status
-    - Variants: variants.hgvs, variants.rsid, variants.significance
-
-    Example:
-    ```
-    await search(
-        query="gene:BRAF AND disease:melanoma AND trials.phase:3",
-        max_results_per_domain=20
-    )
-    ```
-    ## IMPORTANT NOTES:
-    - For complex research questions, use the separate 'think' tool for systematic analysis
-    - The tool returns results in OpenAI MCP format: {"results": [{"id", "title", "text", "url"}, ...]}
-    - Search results do NOT include metadata (per OpenAI MCP specification)
-    - Use the fetch tool to get detailed metadata for specific records
-    - Use get_schema=True to explore available search fields
-    - Use explain_query=True to understand query parsing (unified mode)
-    - For OR logic, use the unified query language
-    - ALWAYS SET explain_query=False
-    - Only specify ONE trials.phase at a time. Do NOT use OR, AND logic for trials.phase.
-
-    ## RETURN FORMAT:
-    All search modes return results in this format:
-    ```json
-    {
-        "results": [
-            {
-                "id": "unique_identifier",
-                "title": "Human-readable title",
-                "text": "Summary or snippet of content",
-                "url": "Link to full resource"
-            }
-        ]
-    }
-    ```
+    Returns results in format: {"results": [{"id", "title", "text", "url"}, ...]}
     """
     logger.info(f"Search called with query={query}")
 
-    # Return schema if requested
-    if get_schema:
-        parser = QueryParser()
-        return parser.get_schema()
-
     # Determine search mode
     if query and query.strip():
+        # Validate query has field syntax - critical for proper routing
+        required_field_prefixes = [
+            "gene:", "disease:", "chemical:", "drug:",
+            "trials.", "articles.", "variants."
+        ]
+        has_field_prefix = any(field in query for field in required_field_prefixes)
+
+        if not has_field_prefix:
+            logger.warning(f"Query missing required field prefix: {query}")
+            return {
+                "results": [],
+                "error": "Invalid query syntax: Missing field prefix",
+                "message": (
+                    "Query MUST contain at least one field prefix for proper routing. "
+                    "Without field prefixes (disease:, gene:, chemical:, trials., etc.), "
+                    "the query will not route to appropriate databases and will return no results."
+                ),
+                "examples": {
+                    "disease_research": "disease:\"mild cognitive impairment\" AND recruitment",
+                    "gene_research": "gene:BRAF AND disease:melanoma",
+                    "trial_search": "trials.condition:diabetes AND trials.phase:3",
+                    "drug_research": "chemical:pembrolizumab AND disease:melanoma"
+                },
+                "your_query": query,
+                "hint": (
+                    "Start your query with one of: disease:, gene:, chemical:, drug:, "
+                    "trials.condition:, trials.intervention:, articles.title:, variants.gene:"
+                )
+            }
+
         # Check if this is a unified query (contains field syntax like "gene:" or "AND")
         is_unified_query = any(
             marker in query for marker in [":", " AND ", " OR "]
@@ -215,10 +217,8 @@ async def biodomain_search(  # noqa: C901
         logger.info(f"Using unified query mode: {query}")
         return await _unified_search(
             query=query,
-            max_results_per_domain=max_results_per_domain
-            or MAX_RESULTS_PER_DOMAIN_DEFAULT,
+            max_results_per_domain=MAX_RESULTS_PER_DOMAIN_DEFAULT,
             domains=None,
-            explain_query=explain_query,
         )
 
 # ────────────────────────────

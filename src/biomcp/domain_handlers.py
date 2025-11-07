@@ -60,7 +60,6 @@ class ArticleHandler:
                 RESULT_ID: result["pmid"],
                 RESULT_TITLE: title,
                 RESULT_SNIPPET: result.get("abstract", "")[:SNIPPET_LENGTH]
-                + "..."
                 if result.get("abstract")
                 else "",
                 RESULT_URL: f"https://pubmed.ncbi.nlm.nih.gov/{result['pmid']}/",
@@ -154,7 +153,7 @@ class TrialHandler:
         return {
             RESULT_ID: nct_id,
             RESULT_TITLE: brief_title or official_title or DEFAULT_TITLE,
-            RESULT_SNIPPET: brief_summary[:SNIPPET_LENGTH] + "..."
+            RESULT_SNIPPET: brief_summary[:SNIPPET_LENGTH]
             if brief_summary
             else "",
             RESULT_URL: f"https://clinicaltrials.gov/study/{nct_id}",
