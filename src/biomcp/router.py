@@ -7,32 +7,25 @@ thinking capabilities.
 
 import json
 import logging
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 from biomcp.constants import (
-    DEFAULT_PAGE_NUMBER,
-    DEFAULT_PAGE_SIZE,
     DEFAULT_TITLE,
-    ERROR_DOMAIN_REQUIRED,
-    ESTIMATED_ADDITIONAL_RESULTS,
     MAX_RESULTS_PER_DOMAIN_DEFAULT,
-    TRIAL_DETAIL_SECTIONS,
     VALID_DOMAINS,
 )
 from biomcp.core import mcp_app
 from biomcp.domain_handlers import get_domain_handler
 from biomcp.exceptions import (
     InvalidDomainError,
-    InvalidParameterError,
     QueryParsingError,
     ResultParsingError,
     SearchExecutionError,
 )
 from biomcp.integrations.biothings_client import BioThingsClient
 from biomcp.metrics import track_performance
-from biomcp.parameter_parser import ParameterParser
 from biomcp.query_parser import QueryParser
 from biomcp.query_router import QueryRouter, execute_routing_plan
 from biomcp.thinking_tracker import get_thinking_reminder
@@ -124,20 +117,20 @@ class BioDomainSearchInput(BaseModel):
         description=(
             "MANDATORY FIELD-BASED QUERY SYNTAX. Query MUST contain field prefixes (disease:, gene:, chemical:, trials.) or it will return ZERO results.\n\n"
             "✅ CORRECT EXAMPLES:\n"
-            "- disease:\"mild cognitive impairment\" AND \"multicenter trial\" AND recruitment\n"
+            '- disease:"mild cognitive impairment" AND "multicenter trial" AND recruitment\n'
             "- gene:BRAF AND disease:melanoma AND (resistance OR resistant)\n"
             "- chemical:pembrolizumab AND trials.phase:3\n"
             "- trials.condition:diabetes AND trials.intervention:metformin\n\n"
             "❌ WRONG (will return NO results):\n"
-            "- \"regulatory compliance AND multi-center trials\" ← Missing disease: prefix\n"
-            "- \"BRAF mutations in melanoma\" ← Missing gene: prefix\n\n"
+            '- "regulatory compliance AND multi-center trials" ← Missing disease: prefix\n'
+            '- "BRAF mutations in melanoma" ← Missing gene: prefix\n\n'
             "REQUIRED SYNTAX RULES:\n"
             "1. Start with field prefix: disease:, gene:, chemical:, drug:, or trials.\n"
-            "2. Quote multi-word phrases: disease:\"mild cognitive impairment\" not disease:mild cognitive impairment\n"
+            '2. Quote multi-word phrases: disease:"mild cognitive impairment" not disease:mild cognitive impairment\n'
             "3. Use uppercase AND/OR: disease:MCI AND recruitment, not disease:MCI and recruitment\n"
             "4. Keep focused (3-5 concepts): Avoid 7+ AND terms\n\n"
             "FIELD PREFIX REFERENCE:\n"
-            "- disease:NAME - For disease/condition research (e.g., disease:MCI, disease:\"Alzheimer's disease\")\n"
+            '- disease:NAME - For disease/condition research (e.g., disease:MCI, disease:"Alzheimer\'s disease")\n'
             "- gene:SYMBOL - For gene research (e.g., gene:BRAF, gene:TP53)\n"
             "- chemical:NAME or drug:NAME - For drug research (e.g., chemical:pembrolizumab)\n"
             "- trials.condition:NAME - For trial condition filters\n"
@@ -145,27 +138,24 @@ class BioDomainSearchInput(BaseModel):
             "- trials.phase:N - For trial phase (1, 2, 3, 4)\n"
             "- articles.date:YYYY-MM-DD..YYYY-MM-DD - For date ranges\n\n"
             "QUERY TEMPLATES BY SCENARIO:\n"
-            "Multicenter trials: disease:\"[condition]\" AND \"multicenter trial\" AND (\"regulatory compliance\" OR harmonization)\n"
-            "Recruitment challenges: disease:\"[condition]\" AND recruitment AND \"diverse populations\" AND (global OR multinational)\n"
-            "Gene-disease research: gene:[SYMBOL] AND disease:\"[condition]\" AND (mechanism OR pathway)\n"
-            "Drug efficacy: chemical:\"[drug]\" AND disease:\"[condition]\" AND trials.phase:[N]\n\n"
+            'Multicenter trials: disease:"[condition]" AND "multicenter trial" AND ("regulatory compliance" OR harmonization)\n'
+            'Recruitment challenges: disease:"[condition]" AND recruitment AND "diverse populations" AND (global OR multinational)\n'
+            'Gene-disease research: gene:[SYMBOL] AND disease:"[condition]" AND (mechanism OR pathway)\n'
+            'Drug efficacy: chemical:"[drug]" AND disease:"[condition]" AND trials.phase:[N]\n\n'
             "REMEMBER: Without field prefix (disease:, gene:, etc.), query routing fails and returns ZERO results."
         )
     )
 
     api_key: str | None = Field(
         default=None,
-        description="NCI API key for NCI-specific domain searches. Get free key at: https://clinicaltrialsapi.cancer.gov/"
+        description="NCI API key for NCI-specific domain searches. Get free key at: https://clinicaltrialsapi.cancer.gov/",
     )
 
 
 # ────────────────────────────
 @mcp_app.tool()
 @track_performance("biomcp.search")
-async def biodomain_search(  # noqa: C901
-    query: str,
-    api_key: str | None = None
-) -> dict:
+async def biodomain_search(query: str, api_key: str | None = None) -> dict:
     """Search biomedical literature, clinical trials, genetic variants, genes, drugs, and diseases.
 
     This tool searches across PubMed/PubTator3, ClinicalTrials.gov, MyVariant.info, and BioThings databases.
@@ -181,10 +171,17 @@ async def biodomain_search(  # noqa: C901
     if query and query.strip():
         # Validate query has field syntax - critical for proper routing
         required_field_prefixes = [
-            "gene:", "disease:", "chemical:", "drug:",
-            "trials.", "articles.", "variants."
+            "gene:",
+            "disease:",
+            "chemical:",
+            "drug:",
+            "trials.",
+            "articles.",
+            "variants.",
         ]
-        has_field_prefix = any(field in query for field in required_field_prefixes)
+        has_field_prefix = any(
+            field in query for field in required_field_prefixes
+        )
 
         if not has_field_prefix:
             logger.warning(f"Query missing required field prefix: {query}")
@@ -197,22 +194,20 @@ async def biodomain_search(  # noqa: C901
                     "the query will not route to appropriate databases and will return no results."
                 ),
                 "examples": {
-                    "disease_research": "disease:\"mild cognitive impairment\" AND recruitment",
+                    "disease_research": 'disease:"mild cognitive impairment" AND recruitment',
                     "gene_research": "gene:BRAF AND disease:melanoma",
                     "trial_search": "trials.condition:diabetes AND trials.phase:3",
-                    "drug_research": "chemical:pembrolizumab AND disease:melanoma"
+                    "drug_research": "chemical:pembrolizumab AND disease:melanoma",
                 },
                 "your_query": query,
                 "hint": (
                     "Start your query with one of: disease:, gene:, chemical:, drug:, "
                     "trials.condition:, trials.intervention:, articles.title:, variants.gene:"
-                )
+                ),
             }
 
         # Check if this is a unified query (contains field syntax like "gene:" or "AND")
-        is_unified_query = any(
-            marker in query for marker in [":", " AND ", " OR "]
-        )
+        any(marker in query for marker in [":", " AND ", " OR "])
 
         logger.info(f"Using unified query mode: {query}")
         return await _unified_search(
@@ -220,6 +215,7 @@ async def biodomain_search(  # noqa: C901
             max_results_per_domain=MAX_RESULTS_PER_DOMAIN_DEFAULT,
             domains=None,
         )
+
 
 # ────────────────────────────
 # Unified FETCH tool
@@ -229,7 +225,16 @@ async def biodomain_search(  # noqa: C901
 async def biodomain_fetch(  # noqa: C901
     id: Annotated[  # noqa: A002
         str,
-        "PMID / NCT ID / Variant ID / DOI / Gene ID / Drug ID / Disease ID / NCI Organization ID / NCI Intervention ID / NCI Disease ID / FDA Report ID / FDA Set ID / FDA MDR Key / FDA Application Number / FDA Recall Number",
+        Field(
+            description=(
+                "The unique identifier for the biomedical record. "
+                "⚠️ CRITICAL: Pass ONLY the raw ID value from search results, WITHOUT adding prefixes. "
+                "For articles, use numeric PMID directly (e.g., '35271234' NOT 'PMID35271234'). "
+                "For trials, use complete NCT ID (e.g., 'NCT04280705'). "
+                "For variants, use rsID or HGVS (e.g., 'rs121913254' or 'chr7:g.140453136A>T'). "
+                "The 'id' field from search results is already in the correct format - use it as-is."
+            )
+        ),
     ],
     domain: Annotated[
         Literal[
@@ -255,174 +260,94 @@ async def biodomain_fetch(  # noqa: C901
             description="Domain of the record (auto-detected if not provided)"
         ),
     ] = None,
-    call_benefit: Annotated[
-        str | None,
-        Field(
-            description="Brief explanation of why this fetch is being performed and expected benefit. Helps provide context for analytics and improves result relevance."
-        ),
-    ] = None,
-    detail: Annotated[
-        Literal[
-            "protocol", "locations", "outcomes", "references", "all", "full"
-        ]
-        | None,
-        "Specific section to retrieve (trials) or 'full' (articles)",
-    ] = None,
-    api_key: Annotated[
-        str | None,
-        Field(
-            description="NCI API key for fetching NCI records (nci_organization, nci_intervention, nci_disease). Required for NCI fetches. Get a free key at: https://clinicaltrialsapi.cancer.gov/"
-        ),
-    ] = None,
 ) -> dict:
-    """Fetch comprehensive details for a specific biomedical record.
+    """
+    ⚠️ CRITICAL: Use this tool after successfully retrieving results from biodomain_search.
+
+    Fetch comprehensive details for a specific biomedical record.
 
     This tool retrieves full information for articles, clinical trials, genetic variants,
-    genes, drugs, or diseases using their unique identifiers. It returns data in a
-    standardized format suitable for detailed analysis and research.
+    genes, drugs, or diseases using their unique identifiers.
 
-    ## IDENTIFIER FORMATS:
-    - Articles: PMID (PubMed ID) - e.g., "35271234" OR DOI - e.g., "10.1101/2024.01.20.23288905"
-    - Trials: NCT ID (ClinicalTrials.gov ID) - e.g., "NCT04280705"
-    - Variants: HGVS notation or dbSNP ID - e.g., "chr7:g.140453136A>T" or "rs121913254"
-    - Genes: Gene symbol or Entrez ID - e.g., "BRAF" or "673"
-    - Drugs: Drug name or ID - e.g., "imatinib" or "DB00619"
-    - Diseases: Disease name or ID - e.g., "melanoma" or "MONDO:0005105"
-    - NCI Organizations: NCI organization ID - e.g., "NCI-2011-03337"
-    - NCI Interventions: NCI intervention ID - e.g., "INT123456"
-    - NCI Diseases: NCI disease ID - e.g., "C4872"
+    ## ⚠️ IMPORTANT: ID FORMAT RULES
 
-    The domain is automatically detected from the ID format if not provided:
-    - NCT* → trial
-    - Contains "/" with numeric prefix (DOI) → article
-    - Pure numeric → article (PMID)
-    - rs* or contains ':' or 'g.' → variant
-    - For genes, drugs, diseases: manual specification recommended
+    **DO NOT add prefixes to IDs.** Use the exact 'id' value from search results.
 
-    ## DOMAIN-SPECIFIC OPTIONS:
+    ### CORRECT Examples:
+    ```
+    # Article (numeric PMID only)
+    biodomain_fetch(id="35271234", domain="article")
 
-    ### Articles (domain="article"):
-    - Returns full article metadata, abstract, and full text when available
-    - Supports both PubMed articles (via PMID) and Europe PMC preprints (via DOI)
-    - Includes annotations for genes, diseases, chemicals, and variants (PubMed only)
-    - detail="full" attempts to retrieve full text content (PubMed only)
+    # Article (DOI format)
+    biodomain_fetch(id="10.1101/2024.01.20.23288905", domain="article")
 
-    ### Clinical Trials (domain="trial"):
-    - detail=None or "protocol": Core study information
-    - detail="locations": Study sites and contact information
-    - detail="outcomes": Primary/secondary outcomes and results
-    - detail="references": Related publications and citations
-    - detail="all": Complete trial record with all sections
+    # Clinical Trial (NCT prefix is part of the ID)
+    biodomain_fetch(id="NCT04280705", domain="trial")
 
-    ### Variants (domain="variant"):
-    - Returns comprehensive variant information including:
-      - Clinical significance and interpretations
-      - Population frequencies
-      - Gene/protein effects
-      - External database links
-    - detail parameter is ignored (always returns full data)
+    # Variant (rsID)
+    biodomain_fetch(id="rs121913254", domain="variant")
 
-    ### Genes (domain="gene"):
-    - Returns gene information from MyGene.info including:
-      - Gene symbol, name, and type
-      - Entrez ID and Ensembl IDs
-      - Gene summary and aliases
-      - RefSeq information
-    - detail parameter is ignored (always returns full data)
-
-    ### Drugs (domain="drug"):
-    - Returns drug/chemical information from MyChem.info including:
-      - Drug name and trade names
-      - Chemical formula and structure IDs
-      - Clinical indications
-      - Mechanism of action
-      - External database links (DrugBank, PubChem, ChEMBL)
-    - detail parameter is ignored (always returns full data)
-
-    ### Diseases (domain="disease"):
-    - Returns disease information from MyDisease.info including:
-      - Disease name and definition
-      - MONDO ontology ID
-      - Disease synonyms
-      - Cross-references to other databases
-      - Associated phenotypes
-    - detail parameter is ignored (always returns full data)
-
-    ### NCI Organizations (domain="nci_organization"):
-    - Returns organization information from NCI database including:
-      - Organization name and type
-      - Full address and contact information
-      - Research focus areas
-      - Associated clinical trials
-    - Requires NCI API key
-    - detail parameter is ignored (always returns full data)
-
-    ### NCI Interventions (domain="nci_intervention"):
-    - Returns intervention information from NCI database including:
-      - Intervention name and type
-      - Synonyms and alternative names
-      - Mechanism of action (for drugs)
-      - FDA approval status
-      - Associated clinical trials
-    - Requires NCI API key
-    - detail parameter is ignored (always returns full data)
-
-    ### NCI Diseases (domain="nci_disease"):
-    - Returns disease information from NCI controlled vocabulary including:
-      - Preferred disease name
-      - Disease category and classification
-      - All known synonyms
-      - Cross-reference codes (ICD, SNOMED)
-    - Requires NCI API key
-    - detail parameter is ignored (always returns full data)
-
-    ## RETURN FORMAT:
-    All fetch operations return a standardized format:
-    ```json
-    {
-        "id": "unique_identifier",
-        "title": "Record title or name",
-        "text": "Full content or comprehensive description",
-        "url": "Link to original source",
-        "metadata": {
-            // Domain-specific additional fields
-        }
-    }
+    # Gene (symbol or numeric Entrez ID)
+    biodomain_fetch(id="BRAF", domain="gene")
+    biodomain_fetch(id="673", domain="gene")
     ```
 
-    ## EXAMPLES:
+    ### ❌ WRONG Examples:
+    ```
+    # DO NOT add "PMID" prefix
+    biodomain_fetch(id="PMID35271234", domain="article")  # WRONG!
 
-    Fetch article by PMID (domain auto-detected):
-    ```
-    await fetch(id="35271234")
-    ```
+    # DO NOT add "GENE" prefix
+    biodomain_fetch(id="GENE673", domain="gene")  # WRONG!
 
-    Fetch article by DOI (domain auto-detected):
-    ```
-    await fetch(id="10.1101/2024.01.20.23288905")
-    ```
-
-    Fetch complete trial information (domain auto-detected):
-    ```
-    await fetch(
-        id="NCT04280705",
-        detail="all"
-    )
+    # DO NOT add "rsID" prefix
+    biodomain_fetch(id="rsID121913254", domain="variant")  # WRONG!
     ```
 
-    Fetch variant with clinical interpretations:
-    ```
-    await fetch(id="rs121913254")
-    ```
-
-    Explicitly specify domain (optional):
-    ```
-    await fetch(
-        domain="variant",
-        id="chr7:g.140453136A>T"
-    )
-    ```
+    ## IDENTIFIER FORMATS BY DOMAIN:
+    - **article**: Numeric PMID (e.g., "35271234") OR DOI (e.g., "10.1101/2024.01.20.23288905")
+    - **trial**: NCT ID with prefix (e.g., "NCT04280705")
+    - **variant**: rsID (e.g., "rs121913254") OR HGVS notation (e.g., "chr7:g.140453136A>T")
+    - **gene**: Gene symbol (e.g., "BRAF") OR numeric Entrez ID (e.g., "673")
+    - **drug**: Drug name (e.g., "imatinib") OR DrugBank ID (e.g., "DB00619")
+    - **disease**: Disease name (e.g., "melanoma") OR ontology ID (e.g., "MONDO:0005105")
+    - **nci_organization**: NCI organization ID (e.g., "NCI-2011-03337")
+    - **nci_intervention**: NCI intervention ID (e.g., "INT123456")
+    - **nci_disease**: NCI disease code (e.g., "C4872")
+    - **fda_adverse**: Safety report ID
+    - **fda_label**: Drug label set ID
+    - **fda_device**: Device report key
+    - **fda_approval**: Application number
+    - **fda_recall**: Recall number
+    - **fda_shortage**: Drug name
     """
+    # Normalize ID by stripping common incorrect prefixes that LLMs might add
+    original_id = id
+    id = id.strip()  # noqa: A001
+
+    # Define incorrect prefixes to strip (case-insensitive)
+    # Note: We preserve "rs" for variants (official format) and "NCT" for trials (official format)
+    incorrect_prefixes = [
+        ("PMID:", ""),  # PMID:12345 -> 12345
+        ("PMID", ""),  # PMID12345 -> 12345
+        ("DOI:", ""),  # DOI:10.1038/... -> 10.1038/...
+        ("GENE:", ""),  # GENE:BRAF -> BRAF
+        ("GENE", ""),  # GENEBRAF -> BRAF (unlikely but handle it)
+        ("DRUG:", ""),  # DRUG:imatinib -> imatinib
+        ("DISEASE:", ""),  # DISEASE:melanoma -> melanoma
+        ("VARIANT:", ""),  # VARIANT:rs12345 -> rs12345
+        ("RSID:", "rs"),  # rsID:12345 -> rs12345
+        ("RSID", "rs"),  # rsID12345 -> rs12345
+    ]
+
+    for prefix, replacement in incorrect_prefixes:
+        if id.upper().startswith(prefix.upper()):
+            id = replacement + id[len(prefix) :].strip()  # noqa: A001
+            logger.warning(
+                f"Stripped incorrect prefix '{prefix}' from ID: {original_id} -> {id}"
+            )
+            break
+
     # Auto-detect domain if not provided
     if domain is None:
         # Try to infer domain from ID format
@@ -450,7 +375,7 @@ async def biodomain_fetch(  # noqa: C901
                 f"Could not auto-detect domain for ID '{id}', defaulting to 'article'"
             )
 
-    logger.info(f"Fetch called for {domain} with id={id}, detail={detail}")
+    logger.info(f"Fetch called for {domain} with id={id}")
 
     if domain == "article":
         logger.debug("Fetching article details")
@@ -459,8 +384,7 @@ async def biodomain_fetch(  # noqa: C901
 
             # The _article_details function handles both PMIDs and DOIs
             result_str = await _article_details(
-                call_benefit=call_benefit
-                or "Fetching article details via MCP tool",
+                call_benefit="Fetching article details via biodomain_fetch",
                 pmid=id,
             )
         except Exception as e:
@@ -512,15 +436,7 @@ async def biodomain_fetch(  # noqa: C901
         }
 
     elif domain == "trial":
-        logger.debug(f"Fetching trial details for section: {detail}")
-
-        # Validate detail parameter
-        if detail is not None and detail not in TRIAL_DETAIL_SECTIONS:
-            raise InvalidParameterError(
-                "detail",
-                detail,
-                f"one of: {', '.join(TRIAL_DETAIL_SECTIONS)} or None",
-            )
+        logger.debug("Fetching trial details")
 
         try:
             # Always fetch protocol for basic info - get JSON format
@@ -607,97 +523,86 @@ async def biodomain_fetch(  # noqa: C901
             )
             text_parts.append(f"\nSummary: {brief_summary}")
 
-            # Prepare metadata
+            # Prepare metadata with basic protocol data
             metadata = {"nct_id": id, "protocol": protocol_data}
 
-            if detail in ("all", "locations", "outcomes", "references"):
-                # Fetch additional sections as needed
-                if detail == "all" or detail == "locations":
-                    try:
-                        locations_json = await trial_getter.get_trial(
-                            nct_id=id,
-                            module=trial_getter.Module.LOCATIONS,
-                            output_json=True,
+            # Always fetch comprehensive data (locations, outcomes, references)
+            # Fetch locations
+            try:
+                locations_json = await trial_getter.get_trial(
+                    nct_id=id,
+                    module=trial_getter.Module.LOCATIONS,
+                    output_json=True,
+                )
+                locations_data = json.loads(locations_json)
+                if "error" not in locations_data:
+                    # Extract locations from the protocol section
+                    locations_module = locations_data.get(
+                        "protocolSection", {}
+                    ).get("contactsLocationsModule", {})
+                    locations_list = locations_module.get("locations", [])
+                    metadata["locations"] = locations_list
+                    if locations_list:
+                        text_parts.append(
+                            f"\n\nLocations: {len(locations_list)} study sites"
                         )
-                        locations_data = json.loads(locations_json)
-                        if "error" not in locations_data:
-                            # Extract locations from the protocol section
-                            locations_module = locations_data.get(
-                                "protocolSection", {}
-                            ).get("contactsLocationsModule", {})
-                            locations_list = locations_module.get(
-                                "locations", []
-                            )
-                            metadata["locations"] = locations_list
-                            if locations_list:
-                                text_parts.append(
-                                    f"\n\nLocations: {len(locations_list)} study sites"
-                                )
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to fetch locations for {id}: {e}"
-                        )
-                        metadata["locations"] = []
+            except Exception as e:
+                logger.warning(f"Failed to fetch locations for {id}: {e}")
+                metadata["locations"] = []
 
-                if detail == "all" or detail == "outcomes":
-                    try:
-                        outcomes_json = await trial_getter.get_trial(
-                            nct_id=id,
-                            module=trial_getter.Module.OUTCOMES,
-                            output_json=True,
+            # Fetch outcomes
+            try:
+                outcomes_json = await trial_getter.get_trial(
+                    nct_id=id,
+                    module=trial_getter.Module.OUTCOMES,
+                    output_json=True,
+                )
+                outcomes_data = json.loads(outcomes_json)
+                if "error" not in outcomes_data:
+                    # Extract outcomes from the protocol section
+                    outcomes_module = outcomes_data.get(
+                        "protocolSection", {}
+                    ).get("outcomesModule", {})
+                    primary_outcomes = outcomes_module.get(
+                        "primaryOutcomes", []
+                    )
+                    secondary_outcomes = outcomes_module.get(
+                        "secondaryOutcomes", []
+                    )
+                    metadata["outcomes"] = {
+                        "primary_outcomes": primary_outcomes,
+                        "secondary_outcomes": secondary_outcomes,
+                    }
+                    if primary_outcomes:
+                        text_parts.append(
+                            f"\n\nPrimary Outcomes: {len(primary_outcomes)} measures"
                         )
-                        outcomes_data = json.loads(outcomes_json)
-                        if "error" not in outcomes_data:
-                            # Extract outcomes from the protocol section
-                            outcomes_module = outcomes_data.get(
-                                "protocolSection", {}
-                            ).get("outcomesModule", {})
-                            primary_outcomes = outcomes_module.get(
-                                "primaryOutcomes", []
-                            )
-                            secondary_outcomes = outcomes_module.get(
-                                "secondaryOutcomes", []
-                            )
-                            metadata["outcomes"] = {
-                                "primary_outcomes": primary_outcomes,
-                                "secondary_outcomes": secondary_outcomes,
-                            }
-                            if primary_outcomes:
-                                text_parts.append(
-                                    f"\n\nPrimary Outcomes: {len(primary_outcomes)} measures"
-                                )
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to fetch outcomes for {id}: {e}"
-                        )
-                        metadata["outcomes"] = {}
+            except Exception as e:
+                logger.warning(f"Failed to fetch outcomes for {id}: {e}")
+                metadata["outcomes"] = {}
 
-                if detail == "all" or detail == "references":
-                    try:
-                        references_json = await trial_getter.get_trial(
-                            nct_id=id,
-                            module=trial_getter.Module.REFERENCES,
-                            output_json=True,
+            # Fetch references
+            try:
+                references_json = await trial_getter.get_trial(
+                    nct_id=id,
+                    module=trial_getter.Module.REFERENCES,
+                    output_json=True,
+                )
+                references_data = json.loads(references_json)
+                if "error" not in references_data:
+                    # Extract references from the protocol section
+                    references_module = references_data.get(
+                        "protocolSection", {}
+                    ).get("referencesModule", {})
+                    references_list = references_module.get("references", [])
+                    metadata["references"] = references_list
+                    if references_list:
+                        text_parts.append(
+                            f"\n\nReferences: {len(references_list)} publications"
                         )
-                        references_data = json.loads(references_json)
-                        if "error" not in references_data:
-                            # Extract references from the protocol section
-                            references_module = references_data.get(
-                                "protocolSection", {}
-                            ).get("referencesModule", {})
-                            references_list = references_module.get(
-                                "references", []
-                            )
-                            metadata["references"] = references_list
-                            if references_list:
-                                text_parts.append(
-                                    f"\n\nReferences: {len(references_list)} publications"
-                                )
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to fetch references for {id}: {e}"
-                        )
-                        metadata["references"] = []
+            except Exception as e:
+                logger.warning(f"Failed to fetch references for {id}: {e}")
+                metadata["references"] = []
 
             # Return OpenAI MCP compliant format
             return {
@@ -981,10 +886,7 @@ async def biodomain_fetch(  # noqa: C901
             from biomcp.organizations import get_organization
             from biomcp.organizations.getter import format_organization_details
 
-            org_data = await get_organization(
-                org_id=id,
-                api_key=api_key,
-            )
+            org_data = await get_organization(org_id=id)
 
             # Format the details
             formatted_text = format_organization_details(org_data)
@@ -1008,10 +910,7 @@ async def biodomain_fetch(  # noqa: C901
             from biomcp.interventions import get_intervention
             from biomcp.interventions.getter import format_intervention_details
 
-            intervention_data = await get_intervention(
-                intervention_id=id,
-                api_key=api_key,
-            )
+            intervention_data = await get_intervention(intervention_id=id)
 
             # Format the details
             formatted_text = format_intervention_details(intervention_data)
@@ -1034,10 +933,7 @@ async def biodomain_fetch(  # noqa: C901
         try:
             from biomcp.diseases import get_disease_by_id
 
-            disease_data = await get_disease_by_id(
-                disease_id=id,
-                api_key=api_key,
-            )
+            disease_data = await get_disease_by_id(disease_id=id)
 
             # Build text description
             text_parts = []
@@ -1088,7 +984,7 @@ async def biodomain_fetch(  # noqa: C901
     elif domain == "fda_adverse":
         from biomcp.openfda import get_adverse_event
 
-        result = await get_adverse_event(id, api_key=api_key)
+        result = await get_adverse_event(id)
         return {
             "title": f"FDA Adverse Event Report {id}",
             "text": result,
@@ -1099,7 +995,7 @@ async def biodomain_fetch(  # noqa: C901
     elif domain == "fda_label":
         from biomcp.openfda import get_drug_label
 
-        result = await get_drug_label(id, api_key=api_key)
+        result = await get_drug_label(id)
         return {
             "title": f"FDA Drug Label {id}",
             "text": result,
@@ -1110,7 +1006,7 @@ async def biodomain_fetch(  # noqa: C901
     elif domain == "fda_device":
         from biomcp.openfda import get_device_event
 
-        result = await get_device_event(id, api_key=api_key)
+        result = await get_device_event(id)
         return {
             "title": f"FDA Device Event {id}",
             "text": result,
@@ -1121,7 +1017,7 @@ async def biodomain_fetch(  # noqa: C901
     elif domain == "fda_approval":
         from biomcp.openfda import get_drug_approval
 
-        result = await get_drug_approval(id, api_key=api_key)
+        result = await get_drug_approval(id)
         return {
             "title": f"FDA Drug Approval {id}",
             "text": result,
@@ -1132,7 +1028,7 @@ async def biodomain_fetch(  # noqa: C901
     elif domain == "fda_recall":
         from biomcp.openfda import get_drug_recall
 
-        result = await get_drug_recall(id, api_key=api_key)
+        result = await get_drug_recall(id)
         return {
             "title": f"FDA Drug Recall {id}",
             "text": result,
@@ -1143,7 +1039,7 @@ async def biodomain_fetch(  # noqa: C901
     elif domain == "fda_shortage":
         from biomcp.openfda import get_drug_shortage
 
-        result = await get_drug_shortage(id, api_key=api_key)
+        result = await get_drug_shortage(id)
         return {
             "title": f"FDA Drug Shortage - {id}",
             "text": result,
