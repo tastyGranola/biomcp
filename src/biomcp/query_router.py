@@ -89,20 +89,36 @@ class QueryRouter:
         if "variant" in parsed_query.cross_domain_fields:
             mapping["variants"] = [parsed_query.cross_domain_fields["variant"]]
 
+        # Map text: field keywords
+        if "text" in parsed_query.cross_domain_fields:
+            text_value = parsed_query.cross_domain_fields["text"]
+            if isinstance(text_value, list):
+                mapping["keywords"] = text_value
+            else:
+                mapping["keywords"] = [text_value]
+
+        # Also add collected text_keywords
+        if parsed_query.text_keywords:
+            if "keywords" not in mapping:
+                mapping["keywords"] = []
+            mapping["keywords"].extend(parsed_query.text_keywords)
+
         # Map article-specific fields
         article_fields = parsed_query.domain_specific_fields.get(
             "articles", {}
         )
         if "title" in article_fields:
-            mapping["keywords"] = [article_fields["title"]]
+            if "keywords" not in mapping:
+                mapping["keywords"] = []
+            mapping["keywords"].append(article_fields["title"])
         if "author" in article_fields:
-            mapping["keywords"] = mapping.get("keywords", []) + [
-                article_fields["author"]
-            ]
+            if "keywords" not in mapping:
+                mapping["keywords"] = []
+            mapping["keywords"].append(article_fields["author"])
         if "journal" in article_fields:
-            mapping["keywords"] = mapping.get("keywords", []) + [
-                article_fields["journal"]
-            ]
+            if "keywords" not in mapping:
+                mapping["keywords"] = []
+            mapping["keywords"].append(article_fields["journal"])
 
         # Extract mutation patterns from raw query
         import re
@@ -114,6 +130,13 @@ class QueryRouter:
             if "keywords" not in mapping:
                 mapping["keywords"] = []
             mapping["keywords"].extend(mutation_patterns)
+
+        # Deduplicate keywords while preserving order
+        if "keywords" in mapping:
+            seen = set()
+            mapping["keywords"] = [
+                x for x in mapping["keywords"] if not (x in seen or seen.add(x))
+            ]
 
         return mapping
 

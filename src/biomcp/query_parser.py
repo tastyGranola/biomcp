@@ -62,6 +62,11 @@ class ParsedQuery:
     cross_domain_fields: dict[str, Any]
     domain_specific_fields: dict[str, dict[str, Any]]
     raw_query: str
+    text_keywords: list[str] = None  # Collected text: field values
+
+    def __post_init__(self):
+        if self.text_keywords is None:
+            self.text_keywords = []
 
 
 class QueryParser:
@@ -102,6 +107,20 @@ class QueryParser:
                 example_values=["melanoma", "lung cancer", "diabetes"],
                 description="Disease or condition",
                 underlying_api_field="disease",
+            ),
+            FieldDefinition(
+                name="text",
+                domain="cross",
+                type=FieldType.STRING,
+                operators=[Operator.EQ],
+                example_values=[
+                    "mass spectrometry",
+                    "single-molecule detection",
+                    "biomarker",
+                    "sensitivity",
+                ],
+                description="General text/keyword search for technologies, methods, concepts",
+                underlying_api_field="keywords",
             ),
         ]
 
@@ -341,6 +360,7 @@ class QueryParser:
         # Simple tokenization - in production, use a proper parser
         terms = self._tokenize(query)
         parsed_terms = []
+        text_keywords = []
 
         cross_domain = {}
         domain_specific: dict[str, dict[str, Any]] = {
@@ -351,6 +371,20 @@ class QueryParser:
             "drugs": {},
             "diseases": {},
         }
+
+        # List of common invalid prefixes to auto-convert to text:
+        invalid_prefixes_to_convert = [
+            "technology",
+            "method",
+            "technique",
+            "study",
+            "pathway",
+            "ancestry",
+            "population",
+            "application",
+            "principles",
+            "variant",  # Should use variants.rsid instead
+        ]
 
         for term in terms:
             if ":" in term:
@@ -369,6 +403,9 @@ class QueryParser:
 
                     # Categorize the term
                     if field_def.domain == "cross":
+                        if field == "text":
+                            # Collect text keywords
+                            text_keywords.append(value.strip('"'))
                         cross_domain[field] = value.strip('"')
                     else:
                         domain = (
@@ -383,11 +420,44 @@ class QueryParser:
                         )
                         domain_specific[domain][field_name] = value.strip('"')
 
+                # Auto-convert common invalid prefixes to text:
+                elif field in invalid_prefixes_to_convert:
+                    # Convert to text: field automatically
+                    value_clean = value.strip('"')
+                    text_keywords.append(value_clean)
+
+                    # Add as parsed term with "text" field
+                    parsed_term = QueryTerm(
+                        field="text",
+                        operator=Operator.EQ,
+                        value=value_clean,
+                        domain="cross",
+                    )
+                    parsed_terms.append(parsed_term)
+
+                    # Also add to cross_domain if not already there
+                    if "text" not in cross_domain:
+                        cross_domain["text"] = value_clean
+                    else:
+                        # If text already exists, append with space
+                        existing = cross_domain["text"]
+                        if isinstance(existing, list):
+                            existing.append(value_clean)
+                        else:
+                            cross_domain["text"] = [existing, value_clean]
+            else:
+                # Bare keyword without field prefix - treat as text keyword
+                # Only add if it's not empty and not just whitespace
+                keyword = term.strip().strip('"')
+                if keyword and len(keyword) > 1:  # Ignore single chars
+                    text_keywords.append(keyword)
+
         return ParsedQuery(
             terms=parsed_terms,
             cross_domain_fields=cross_domain,
             domain_specific_fields=domain_specific,
             raw_query=query,
+            text_keywords=text_keywords,
         )
 
     def _tokenize(self, query: str) -> list[str]:

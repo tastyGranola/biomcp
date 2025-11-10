@@ -115,34 +115,57 @@ class BioDomainSearchInput(BaseModel):
 
     query: str = Field(
         description=(
-            "MANDATORY FIELD-BASED QUERY SYNTAX. Query MUST contain field prefixes (disease:, gene:, chemical:, trials.) or it will return ZERO results.\n\n"
+            "MANDATORY FIELD-BASED QUERY SYNTAX. Query MUST contain field prefixes (disease:, gene:, chemical:, text:, trials.) or it will return ZERO results.\n\n"
             "✅ CORRECT EXAMPLES:\n"
-            '- disease:"mild cognitive impairment" AND "multicenter trial" AND recruitment\n'
+            '- disease:"mild cognitive impairment" AND text:"mass spectrometry" AND (biomarker OR "protein detection")\n'
             "- gene:BRAF AND disease:melanoma AND (resistance OR resistant)\n"
             "- chemical:pembrolizumab AND trials.phase:3\n"
-            "- trials.condition:diabetes AND trials.intervention:metformin\n\n"
+            '- disease:MCI AND text:"single-molecule detection" AND text:"protein biomarker" AND (sensitivity OR specificity)\n'
+            '- gene:APOE AND disease:"Alzheimer\'s disease" AND text:"allele frequency"\n\n'
             "❌ WRONG (will return NO results):\n"
-            '- "regulatory compliance AND multi-center trials" ← Missing disease: prefix\n'
-            '- "BRAF mutations in melanoma" ← Missing gene: prefix\n\n'
+            '- "regulatory compliance AND multi-center trials" ← Missing disease: or text: prefix\n'
+            '- "BRAF mutations in melanoma" ← Missing gene: prefix\n'
+            '- gene:APOE AND study:"GWAS" ← Invalid prefix "study:", use text:"GWAS" or text:"genome-wide association"\n'
+            '- gene:APOE AND variant:rs429358 ← Use "variants.rsid:" not "variant:"\n'
+            '- disease:MCI AND technology:"mass spec" ← Invalid prefix "technology:", use text:"mass spectrometry"\n'
+            '- pathway:MAPK ← Invalid prefix "pathway:", use text:"MAPK pathway" or gene:MAPK\n\n'
             "REQUIRED SYNTAX RULES:\n"
-            "1. Start with field prefix: disease:, gene:, chemical:, drug:, or trials.\n"
-            '2. Quote multi-word phrases: disease:"mild cognitive impairment" not disease:mild cognitive impairment\n'
-            "3. Use uppercase AND/OR: disease:MCI AND recruitment, not disease:MCI and recruitment\n"
-            "4. Keep focused (3-5 concepts): Avoid 7+ AND terms\n\n"
-            "FIELD PREFIX REFERENCE:\n"
-            '- disease:NAME - For disease/condition research (e.g., disease:MCI, disease:"Alzheimer\'s disease")\n'
-            "- gene:SYMBOL - For gene research (e.g., gene:BRAF, gene:TP53)\n"
-            "- chemical:NAME or drug:NAME - For drug research (e.g., chemical:pembrolizumab)\n"
-            "- trials.condition:NAME - For trial condition filters\n"
-            "- trials.intervention:NAME - For trial intervention filters\n"
-            "- trials.phase:N - For trial phase (1, 2, 3, 4)\n"
-            "- articles.date:YYYY-MM-DD..YYYY-MM-DD - For date ranges\n\n"
+            "1. ONLY use these EXACT field prefixes: disease:, gene:, chemical:, drug:, text:, trials., articles., variants.\n"
+            "2. DO NOT invent new prefixes like study:, pathway:, technology:, method:, ancestry: - use text: instead\n"
+            '3. Quote multi-word phrases: disease:"mild cognitive impairment" not disease:mild cognitive impairment\n'
+            "4. Use uppercase AND/OR: disease:MCI AND text:biomarker, not disease:MCI and text:biomarker\n"
+            "5. Keep focused (3-5 concepts): Avoid 7+ AND terms\n"
+            "6. For technology/method/technique terms, ALWAYS use text: prefix: text:\"mass spectrometry\" NOT technology:\"mass spectrometry\"\n"
+            "7. Multiple text: fields are allowed and encouraged: disease:X AND text:Y AND text:Z AND (keyword1 OR keyword2)\n\n"
+            "COMPLETE LIST OF VALID FIELD PREFIXES (use ONLY these):\n"
+            '- disease:NAME - Disease/condition (e.g., disease:MCI, disease:"Alzheimer\'s disease")\n'
+            "- gene:SYMBOL - Gene symbols (e.g., gene:BRAF, gene:APOE, gene:TP53)\n"
+            "- chemical:NAME - Chemicals/drugs (e.g., chemical:pembrolizumab)\n"
+            "- drug:NAME - Alternative for drugs (e.g., drug:metformin)\n"
+            "- text:PHRASE - General text/keyword search for ANY other concepts (methods, technologies, study types, etc.)\n"
+            "- trials.condition:NAME - Trial conditions\n"
+            "- trials.intervention:NAME - Trial interventions\n"
+            "- trials.phase:N - Trial phase (1, 2, 3, or 4)\n"
+            "- articles.date:YYYY-MM-DD..YYYY-MM-DD - Date ranges\n"
+            "- articles.title:TEXT - Article title search\n"
+            "- variants.rsid:RSID - Variant rsID (e.g., variants.rsid:rs429358)\n"
+            "- variants.gene:SYMBOL - Variants by gene\n\n"
+            "WHEN TO USE text: FIELD:\n"
+            "Use text: for:\n"
+            "- Technologies: text:\"mass spectrometry\", text:\"single-molecule detection\"\n"
+            "- Methods/techniques: text:\"Western blot\", text:\"ELISA\"\n"
+            "- Study types: text:\"genome-wide association\", text:\"meta-analysis\"\n"
+            "- Biological concepts: text:\"protein biomarker\", text:\"signaling pathway\"\n"
+            "- Any other keywords: text:sensitivity, text:specificity, text:biomarker\n\n"
             "QUERY TEMPLATES BY SCENARIO:\n"
-            'Multicenter trials: disease:"[condition]" AND "multicenter trial" AND ("regulatory compliance" OR harmonization)\n'
-            'Recruitment challenges: disease:"[condition]" AND recruitment AND "diverse populations" AND (global OR multinational)\n'
-            'Gene-disease research: gene:[SYMBOL] AND disease:"[condition]" AND (mechanism OR pathway)\n'
-            'Drug efficacy: chemical:"[drug]" AND disease:"[condition]" AND trials.phase:[N]\n\n'
-            "REMEMBER: Without field prefix (disease:, gene:, etc.), query routing fails and returns ZERO results."
+            'Multicenter trials: disease:"[condition]" AND text:"multicenter trial" AND (text:"regulatory compliance" OR text:harmonization)\n'
+            'Recruitment challenges: disease:"[condition]" AND text:recruitment AND text:"diverse populations"\n'
+            'Gene-disease research: gene:[SYMBOL] AND disease:"[condition]" AND (text:mechanism OR text:"signaling pathway")\n'
+            'Drug efficacy: chemical:"[drug]" AND disease:"[condition]" AND trials.phase:[N]\n'
+            'Technology comparison: disease:MCI AND text:"mass spectrometry" AND (text:sensitivity OR text:specificity)\n'
+            'Protein detection: disease:"[condition]" AND text:"low-abundance proteins" AND text:biomarker AND text:"detection technology"\n'
+            'Population genetics: gene:[SYMBOL] AND disease:[condition] AND text:"population stratification"\n\n'
+            "REMEMBER: Without valid field prefix (disease:, gene:, chemical:, drug:, text:, trials., articles., variants.), query routing fails and returns ZERO results."
         )
     )
 
@@ -161,7 +184,7 @@ async def biodomain_search(query: str, api_key: str | None = None) -> dict:
     This tool searches across PubMed/PubTator3, ClinicalTrials.gov, MyVariant.info, and BioThings databases.
 
     ⚠️ CRITICAL: Query parameter MUST use field-based syntax (see query field description for details).
-    Queries without field prefixes (disease:, gene:, chemical:, trials.) will return ZERO results.
+    Queries without field prefixes (disease:, gene:, chemical:, text:, trials.) will return ZERO results.
 
     Returns results in format: {"results": [{"id", "title", "text", "url"}, ...]}
     """
@@ -175,6 +198,7 @@ async def biodomain_search(query: str, api_key: str | None = None) -> dict:
             "disease:",
             "chemical:",
             "drug:",
+            "text:",
             "trials.",
             "articles.",
             "variants.",
@@ -190,7 +214,7 @@ async def biodomain_search(query: str, api_key: str | None = None) -> dict:
                 "error": "Invalid query syntax: Missing field prefix",
                 "message": (
                     "Query MUST contain at least one field prefix for proper routing. "
-                    "Without field prefixes (disease:, gene:, chemical:, trials., etc.), "
+                    "Without field prefixes (disease:, gene:, chemical:, text:, trials., etc.), "
                     "the query will not route to appropriate databases and will return no results."
                 ),
                 "examples": {
@@ -198,10 +222,11 @@ async def biodomain_search(query: str, api_key: str | None = None) -> dict:
                     "gene_research": "gene:BRAF AND disease:melanoma",
                     "trial_search": "trials.condition:diabetes AND trials.phase:3",
                     "drug_research": "chemical:pembrolizumab AND disease:melanoma",
+                    "text_search": 'text:"mass spectrometry" AND text:biomarker',
                 },
                 "your_query": query,
                 "hint": (
-                    "Start your query with one of: disease:, gene:, chemical:, drug:, "
+                    "Start your query with one of: disease:, gene:, chemical:, drug:, text:, "
                     "trials.condition:, trials.intervention:, articles.title:, variants.gene:"
                 ),
             }
@@ -268,6 +293,25 @@ async def biodomain_fetch(  # noqa: C901
 
     This tool retrieves full information for articles, clinical trials, genetic variants,
     genes, drugs, or diseases using their unique identifiers.
+
+    ## ⚠️ STRATEGIC USAGE GUIDANCE
+
+    **PRIORITIZE fetching articles and selective structured data**:
+    1. **HIGHEST PRIORITY**: articles, variants, drugs, diseases
+       - **Articles**: Often provide FULL TEXT with detailed methodology, results, and discussion sections
+       - Variants: clinical significance, allele frequencies, pathogenicity scores
+       - Drugs: mechanisms, indications, pharmacology, interactions
+       - Diseases: definitions, synonyms, phenotypes, ontology relationships
+
+    2. **LOW PRIORITY / DISCOURAGED**: trials, genes
+       - **Trials**: Rarely contain critical outcomes data; limited value beyond search results
+       - **Genes**: biodomain_search already returns sufficient gene information; no additional value from fetch
+
+    **When to fetch articles:**
+    - ✓ Articles have HIGH chance of returning full text with critical details
+    - ✓ Full methodology, results, and discussion sections often available
+    - ✓ Provides comprehensive information beyond abstracts
+    - ✓ Should be prioritized for detailed research needs
 
     ## ⚠️ IMPORTANT: ID FORMAT RULES
 
