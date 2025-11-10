@@ -34,6 +34,226 @@ from biomcp.trials import getter as trial_getter
 logger = logging.getLogger(__name__)
 
 
+# ────────────────────────────
+# BIOMEDICAL ARTICLE SUMMARIZATION
+# ────────────────────────────
+
+# Initialize summarization model once at module level (like tavily_search does)
+_summarization_model = None
+_vllm_import_attempted = False
+
+
+def _get_summarization_model():
+    """Get or initialize the summarization model singleton.
+
+    Returns:
+        The summarization model client, or None if not available
+    """
+    global _summarization_model, _vllm_import_attempted
+
+    if _vllm_import_attempted:
+        return _summarization_model
+
+    _vllm_import_attempted = True
+
+    try:
+        import sys
+        from pathlib import Path
+
+        # Try to find and add llm-server to path if needed
+        current_file = Path(__file__).resolve()
+        # Navigate up from biomcp/src/biomcp/router.py to incoagent/ directory
+        incoagent_root = current_file.parent.parent.parent.parent
+        llm_server_path = incoagent_root / "llm-server"
+
+        if llm_server_path.exists() and str(llm_server_path) not in sys.path:
+            sys.path.insert(0, str(llm_server_path))
+            logger.info(f"Added llm-server to Python path: {llm_server_path}")
+
+        from llm.vllm_client import VLLMClient
+
+        _summarization_model = VLLMClient()._get_client()
+        logger.info("Successfully initialized VLLMClient for article summarization")
+        return _summarization_model
+
+    except Exception as e:
+        logger.warning(f"VLLMClient not available for summarization: {e}")
+        _summarization_model = None
+        return None
+
+
+# Summarization prompt specialized for biomedical content
+BIOMEDICAL_SUMMARIZATION_PROMPT = """You are tasked with summarizing the content of a biomedical article retrieved from a scientific database. Your goal is to create a summary that preserves the most important scientific information that is RELEVANT to the research topic. This summary will be used by downstream research agents and LLMs, so it's crucial to maintain key biomedical details without losing essential information.
+
+<research_context>
+The article was retrieved as part of research on the following topic:
+{research_topic}
+
+Your summary should PRIORITIZE information that is directly relevant to this research topic while maintaining scientific accuracy and completeness.
+</research_context>
+
+Here is the biomedical article content:
+
+<article_content>
+{article_content}
+</article_content>
+
+Please follow these guidelines to create your biomedical summary:
+
+1. **PRIORITIZE RELEVANCE**: Focus on extracting information that directly relates to the research topic. If the article is lengthy, prioritize sections most relevant to the research question.
+2. **Preserve Scientific Rigor**: Maintain accuracy of methods, results, statistics, and conclusions
+3. **Keep Key Biomedical Entities**: Gene names, protein names, drug names, disease terms, biological pathways, and molecular mechanisms should be preserved exactly as written
+4. **Retain Critical Data**: P-values, fold changes, concentrations, sample sizes, and other quantitative measurements
+5. **Maintain Clinical Relevance**: Patient outcomes, clinical trial phases, efficacy rates, and safety profiles
+6. **Include Methodology**: Experimental approaches, model systems, and analytical techniques that are crucial to understanding the findings
+7. **Preserve Important Quotes**: Key statements from authors, especially novel findings or clinical implications
+
+When handling biomedical content (always focusing on research topic relevance):
+
+- For research articles: Focus on objectives, methods, KEY RESULTS (with statistics), and CONCLUSIONS as they relate to the research topic
+- For clinical trials: Emphasize study design, patient population, interventions, primary/secondary outcomes, and safety data relevant to the research focus
+- For reviews: Extract consensus findings, controversies, and future directions pertinent to the research topic
+- For case studies: Highlight patient characteristics, treatments, outcomes, and clinical insights that address the research question
+
+**CRITICAL LENGTH REQUIREMENT:**
+Your summary should be significantly shorter than the original content, aiming for about 25-30% of the original length unless the content is already very concise. However, if only a small portion of the content is relevant to the research topic, focus your summary on that portion and briefly note what other topics the article covers.
+
+**DO NOT translate or modify technical terms** - keep all gene names, protein names, drug names, disease terms, and technical terminology in their original form.
+
+Present your summary in plain text format without JSON structure. Structure your summary with:
+- A brief paragraph summarizing the main findings relevant to the research topic
+- Key methodological details if relevant
+- Important quantitative results (with statistics)
+- Clinical or biological implications
+- 2-5 important direct quotes or key excerpts (if available and relevant)
+
+**Example summary structure:**
+
+This study investigated [research focus] using [methodology]. The authors found that [key finding with statistics]. Specifically, [specific result relevant to research topic]. The clinical/biological implications include [implications].
+
+Key findings:
+- [Finding 1 with data]
+- [Finding 2 with data]
+- [Finding 3 with data]
+
+Important quotes:
+- "[Significant quote from authors]"
+- "[Another key statement]"
+
+Remember, your goal is to create a summary that can be easily understood and utilized by downstream LLMs and research agents while preserving the most critical biomedical information from the original article relevant to the specific research topic."""
+
+
+def estimate_tokens(text: str) -> int:
+    """Estimate token count using a simple heuristic.
+
+    Approximation: 1 token ≈ 3 characters for English text.
+    This is conservative and works well for mixed content.
+
+    Args:
+        text: Text to estimate tokens for
+
+    Returns:
+        Estimated token count
+    """
+    return max(len(text) // 3, 1)
+
+
+async def summarize_article_content(
+    article_content: str,
+    research_topic: str = "general biomedical research"
+) -> str:
+    """Summarize biomedical article content using an LLM.
+
+    Automatically truncates content if it exceeds safe token limits to prevent
+    context length errors. This is specifically designed for biomedical articles
+    from biodomain_fetch.
+
+    Note: This function requires VLLMClient from llm-server package to be available.
+    If not available, it will fall back to simple truncation.
+
+    Args:
+        article_content: Raw article content (full text or abstract) to summarize
+        research_topic: The research topic/question being investigated (used to focus the summary)
+
+    Returns:
+        Summarized article content focused on the research topic
+    """
+    try:
+        # Get the singleton summarization model
+        summarization_model = _get_summarization_model()
+
+        if summarization_model is None:
+            # Fallback: just truncate without summarization
+            logger.info("Summarization model not available, using truncation fallback")
+            if len(article_content) > 15000:  # ~5000 tokens
+                return article_content[:15000] + "\n\n[Content truncated due to length - VLLMClient not available]"
+            return article_content
+
+        # Import HumanMessage for prompt construction
+        from langchain_core.messages import HumanMessage
+
+        # Token budget calculation:
+        # - Assume model max_tokens: 40,000
+        # - Max completion tokens: 7,500
+        # - Prompt template overhead: ~1,500 tokens
+        # - Safety buffer: 1,500 tokens
+        # = Safe article content limit: 29,500 tokens (~88,500 chars)
+        MAX_ARTICLE_TOKENS = 22500
+
+        # Estimate tokens in article content
+        estimated_tokens = estimate_tokens(article_content)
+
+        # Truncate if needed
+        truncated_content = article_content
+        was_truncated = False
+
+        if estimated_tokens > MAX_ARTICLE_TOKENS:
+            # Calculate character limit (tokens * 3 chars/token)
+            char_limit = MAX_ARTICLE_TOKENS * 3
+            truncated_content = article_content[:char_limit]
+            was_truncated = True
+
+            logger.info(
+                f"Article content truncated: {estimated_tokens:,} → "
+                f"{MAX_ARTICLE_TOKENS:,} tokens for summarization"
+            )
+
+            # Add truncation notice to content
+            truncation_notice = (
+                f"\n\n[NOTE: Content was automatically truncated from ~{estimated_tokens:,} "
+                f"to ~{MAX_ARTICLE_TOKENS:,} tokens to fit within model limits. "
+                f"Summary is based on the first portion of the content.]"
+            )
+            truncated_content += truncation_notice
+
+        # Generate summary asynchronously using the singleton model
+        response = await summarization_model.ainvoke([
+            HumanMessage(content=BIOMEDICAL_SUMMARIZATION_PROMPT.format(
+                article_content=truncated_content,
+                research_topic=research_topic,
+            ))
+        ])
+
+        # Extract the summary text from the response
+        summary_text = response.content if hasattr(response, 'content') else str(response)
+
+        # Add truncation warning to output if content was truncated
+        if was_truncated:
+            summary_text = (
+                f"[Content was truncated due to length]\n\n{summary_text}"
+            )
+
+        logger.info("Article summarization completed successfully")
+        return summary_text
+
+    except Exception as e:
+        logger.error(f"Failed to summarize article: {str(e)}")
+        # Fallback: return truncated original content
+        if len(article_content) > 15000:  # ~5000 tokens
+            return article_content[:15000] + "\n\n[Summarization failed, content truncated]"
+        return article_content
+
+
 def format_results(
     results: list[dict], domain: str, page: int, page_size: int, total: int
 ) -> dict:
@@ -459,6 +679,26 @@ async def biodomain_fetch(  # noqa: C901
         full_text = article.get("full_text", "")
         abstract = article.get("abstract", "")
         text_content = full_text if full_text else abstract
+
+        # Apply summarization if content is long (exceeds ~5000 tokens / 15000 chars)
+        # This helps downstream LLMs process the content more efficiently
+        SUMMARIZATION_THRESHOLD = 15000  # characters (~5000 tokens)
+
+        if len(text_content) > SUMMARIZATION_THRESHOLD:
+            logger.info(
+                f"Article content length ({len(text_content)} chars) exceeds threshold "
+                f"({SUMMARIZATION_THRESHOLD} chars). Applying summarization."
+            )
+            # Extract research topic from the article title as a fallback
+            # In a real scenario, this might be passed as a parameter to biodomain_fetch
+            research_topic = article.get("title", "biomedical research")
+
+            # Summarize the content
+            text_content = await summarize_article_content(
+                article_content=text_content,
+                research_topic=research_topic
+            )
+            logger.info("Article summarization completed")
 
         return {
             "id": str(article.get("pmid", id)),
