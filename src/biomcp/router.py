@@ -9,6 +9,7 @@ import json
 import logging
 from typing import Annotated, Literal
 
+from langchain_core.tools import InjectedToolArg
 from pydantic import BaseModel, Field
 
 from biomcp.constants import (
@@ -335,57 +336,37 @@ class BioDomainSearchInput(BaseModel):
 
     query: str = Field(
         description=(
-            "MANDATORY FIELD-BASED QUERY SYNTAX. Query MUST contain field prefixes (disease:, gene:, chemical:, text:, trials.) or it will return ZERO results.\n\n"
-            "✅ CORRECT EXAMPLES:\n"
-            '- disease:"mild cognitive impairment" AND text:"mass spectrometry" AND (biomarker OR "protein detection")\n'
-            "- gene:BRAF AND disease:melanoma AND (resistance OR resistant)\n"
-            "- chemical:pembrolizumab AND trials.phase:3\n"
-            '- disease:MCI AND text:"single-molecule detection" AND text:"protein biomarker" AND (sensitivity OR specificity)\n'
-            '- gene:APOE AND disease:"Alzheimer\'s disease" AND text:"allele frequency"\n\n'
-            "❌ WRONG (will return NO results):\n"
-            '- "regulatory compliance AND multi-center trials" ← Missing disease: or text: prefix\n'
-            '- "BRAF mutations in melanoma" ← Missing gene: prefix\n'
-            '- gene:APOE AND study:"GWAS" ← Invalid prefix "study:", use text:"GWAS" or text:"genome-wide association"\n'
-            '- gene:APOE AND variant:rs429358 ← Use "variants.rsid:" not "variant:"\n'
-            '- disease:MCI AND technology:"mass spec" ← Invalid prefix "technology:", use text:"mass spectrometry"\n'
-            '- pathway:MAPK ← Invalid prefix "pathway:", use text:"MAPK pathway" or gene:MAPK\n\n'
-            "REQUIRED SYNTAX RULES:\n"
-            "1. ONLY use these EXACT field prefixes: disease:, gene:, chemical:, drug:, text:, trials., articles., variants.\n"
-            "2. DO NOT invent new prefixes like study:, pathway:, technology:, method:, ancestry: - use text: instead\n"
-            '3. Quote multi-word phrases: disease:"mild cognitive impairment" not disease:mild cognitive impairment\n'
-            "4. Use uppercase AND/OR: disease:MCI AND text:biomarker, not disease:MCI and text:biomarker\n"
-            "5. Keep focused (3-5 concepts): Avoid 7+ AND terms\n"
-            "6. For technology/method/technique terms, ALWAYS use text: prefix: text:\"mass spectrometry\" NOT technology:\"mass spectrometry\"\n"
-            "7. Multiple text: fields are allowed and encouraged: disease:X AND text:Y AND text:Z AND (keyword1 OR keyword2)\n\n"
-            "COMPLETE LIST OF VALID FIELD PREFIXES (use ONLY these):\n"
-            '- disease:NAME - Disease/condition (e.g., disease:MCI, disease:"Alzheimer\'s disease")\n'
-            "- gene:SYMBOL - Gene symbols (e.g., gene:BRAF, gene:APOE, gene:TP53)\n"
-            "- chemical:NAME - Chemicals/drugs (e.g., chemical:pembrolizumab)\n"
-            "- drug:NAME - Alternative for drugs (e.g., drug:metformin)\n"
-            "- text:PHRASE - General text/keyword search for ANY other concepts (methods, technologies, study types, etc.)\n"
-            "- trials.condition:NAME - Trial conditions\n"
-            "- trials.intervention:NAME - Trial interventions\n"
-            "- trials.phase:N - Trial phase (1, 2, 3, or 4)\n"
-            "- articles.date:YYYY-MM-DD..YYYY-MM-DD - Date ranges\n"
-            "- articles.title:TEXT - Article title search\n"
-            "- variants.rsid:RSID - Variant rsID (e.g., variants.rsid:rs429358)\n"
-            "- variants.gene:SYMBOL - Variants by gene\n\n"
-            "WHEN TO USE text: FIELD:\n"
-            "Use text: for:\n"
-            "- Technologies: text:\"mass spectrometry\", text:\"single-molecule detection\"\n"
-            "- Methods/techniques: text:\"Western blot\", text:\"ELISA\"\n"
-            "- Study types: text:\"genome-wide association\", text:\"meta-analysis\"\n"
-            "- Biological concepts: text:\"protein biomarker\", text:\"signaling pathway\"\n"
-            "- Any other keywords: text:sensitivity, text:specificity, text:biomarker\n\n"
-            "QUERY TEMPLATES BY SCENARIO:\n"
-            'Multicenter trials: disease:"[condition]" AND text:"multicenter trial" AND (text:"regulatory compliance" OR text:harmonization)\n'
-            'Recruitment challenges: disease:"[condition]" AND text:recruitment AND text:"diverse populations"\n'
-            'Gene-disease research: gene:[SYMBOL] AND disease:"[condition]" AND (text:mechanism OR text:"signaling pathway")\n'
-            'Drug efficacy: chemical:"[drug]" AND disease:"[condition]" AND trials.phase:[N]\n'
-            'Technology comparison: disease:MCI AND text:"mass spectrometry" AND (text:sensitivity OR text:specificity)\n'
-            'Protein detection: disease:"[condition]" AND text:"low-abundance proteins" AND text:biomarker AND text:"detection technology"\n'
-            'Population genetics: gene:[SYMBOL] AND disease:[condition] AND text:"population stratification"\n\n'
-            "REMEMBER: Without valid field prefix (disease:, gene:, chemical:, drug:, text:, trials., articles., variants.), query routing fails and returns ZERO results."
+            "Simple keyword-based search for biomedical literature. Extract 3-4 most important keywords from the research topic.\n\n"
+            "## APPROACH: Keep It Simple!\n"
+            "1. Extract 3-4 key terms from the research topic\n"
+            "2. Use text: prefix for most keywords (technologies, methods, concepts)\n"
+            "3. Optionally use disease: or gene: if highly relevant\n"
+            "4. Connect with AND between terms\n\n"
+            "## FIELD PREFIXES (optional - use when relevant):\n"
+            "- text: - Use for MOST terms (methods, technologies, keywords, concepts)\n"
+            "- disease: - OPTIONAL: Use only if disease/condition is central to research\n"
+            "- gene: - OPTIONAL: Use only if specific gene is the focus\n\n"
+            "## SYNTAX RULES:\n"
+            "1. Multi-word terms: Use quotes \"breast cancer\" OR plus signs breast+cancer (NEVER underscores)\n"
+            "2. Boolean: Use uppercase AND between terms\n"
+            "3. Keep simple: 3-4 keywords maximum\n"
+            "4. All keywords need prefix: text:keyword1 AND text:keyword2\n\n"
+            "## ✅ GOOD EXAMPLES (Simple & Effective):\n"
+            '- text:"mass spectrometry" AND text:biomarker AND text:sensitivity\n'
+            "- text:Simoa AND text:protein+detection AND text:MCI\n"
+            '- disease:"breast cancer" AND text:glycoprotein AND text:biomarker\n'
+            "- gene:BRAF AND text:mutation AND text:resistance\n"
+            "- text:SWATH-MS AND text:proteomics AND text:discovery\n\n"
+            "## ❌ AVOID:\n"
+            "- Too many terms (7+) - Keep to 3-4 keywords\n"
+            "- Underscores: mass_spectrometry ✗ → Use text:\"mass spectrometry\" ✓\n"
+            "- Range syntax: year:[2020 TO 2025] ✗ → Use (year:2020 OR year:2021) if needed ✓\n"
+            "- Bare keywords without prefix ✗ → Always use text: prefix ✓\n\n"
+            "## QUICK GUIDE:\n"
+            "For research topic: \"Using mass spectrometry to detect protein biomarkers in Alzheimer's disease\"\n"
+            'Best query: text:"mass spectrometry" AND text:protein+biomarker AND disease:"Alzheimer\'s disease"\n'
+            "OR simpler: text:mass+spectrometry AND text:biomarker AND text:Alzheimer\n\n"
+            "Key principle: Extract the 3-4 MOST IMPORTANT keywords and use text: prefix. Add disease:/gene: only if they're central to the research."
         )
     )
 
@@ -399,14 +380,30 @@ class BioDomainSearchInput(BaseModel):
 @mcp_app.tool()
 @track_performance("biomcp.search")
 async def biodomain_search(query: str, api_key: str | None = None) -> dict:
-    """Search biomedical literature, clinical trials, genetic variants, genes, drugs, and diseases.
+    """Search biomedical literature across multiple databases with simple keyword queries.
 
-    This tool searches across PubMed/PubTator3, ClinicalTrials.gov, MyVariant.info, and BioThings databases.
+    Searches PubMed/PubTator3, ClinicalTrials.gov, and other biomedical databases using 3-4 key terms.
 
-    ⚠️ CRITICAL: Query parameter MUST use field-based syntax (see query field description for details).
-    Queries without field prefixes (disease:, gene:, chemical:, text:, trials.) will return ZERO results.
+    Query Construction (Keep It Simple):
+        1. Extract 3-4 most important keywords from research topic
+        2. Use text: prefix for most terms (methods, technologies, concepts)
+        3. Optionally add disease: or gene: if central to research
+        4. Connect with AND
 
-    Returns results in format: {"results": [{"id", "title", "text", "url"}, ...]}
+    Args:
+        query: Search query with field prefixes. Examples:
+            - text:"mass spectrometry" AND text:biomarker AND text:sensitivity
+            - disease:"breast cancer" AND text:glycoprotein AND text:biomarker
+            - gene:BRAF AND text:mutation AND text:resistance
+        api_key: Optional NCI API key for specialized searches
+
+    Returns:
+        Dictionary with results: {"results": [{"id", "title", "text", "url"}, ...]}
+
+    Note:
+        - Use quotes for multi-word terms: "breast cancer" not breast_cancer
+        - Keep queries simple: 3-4 keywords work best
+        - text: is the primary prefix, disease:/gene: are optional enhancements
     """
     logger.info(f"Search called with query={query}")
 
@@ -505,85 +502,42 @@ async def biodomain_fetch(  # noqa: C901
             description="Domain of the record (auto-detected if not provided)"
         ),
     ] = None,
+    research_topic: Annotated[str, InjectedToolArg] = "general biomedical research",
 ) -> dict:
-    """
-    ⚠️ CRITICAL: Use this tool after successfully retrieving results from biodomain_search.
+    """Fetch full details for a biomedical record identified by its ID.
 
-    Fetch comprehensive details for a specific biomedical record.
+    Use this tool AFTER biodomain_search to retrieve comprehensive information about
+    specific articles, trials, variants, genes, drugs, or diseases.
 
-    This tool retrieves full information for articles, clinical trials, genetic variants,
-    genes, drugs, or diseases using their unique identifiers.
+    Args:
+        id: The unique identifier from biodomain_search results. Use the 'id' field exactly as provided.
+            - Articles: PMID (e.g., "35271234")
+            - Trials: NCT ID (e.g., "NCT04280705")
+            - Variants: rsID (e.g., "rs121913254")
+            - Genes: Gene symbol (e.g., "BRAF") or Entrez ID (e.g., "673")
+            - Drugs/Diseases: Name or database ID
+        domain: Type of record (usually auto-detected). Options: article, trial, variant, gene, drug, disease.
+        research_topic: Injected automatically - the current research topic for focused summarization.
 
-    ## ⚠️ STRATEGIC USAGE GUIDANCE
+    Returns:
+        Full details including:
+        - **Articles**: Full text or abstract (automatically summarized if long, focused on research_topic)
+        - **Trials**: Study design, conditions, interventions, status, outcomes
+        - **Variants**: Clinical significance, allele frequencies, pathogenicity scores
+        - **Genes**: Function, pathways, associated diseases
+        - **Drugs**: Mechanisms, indications, pharmacology
+        - **Diseases**: Definitions, synonyms, phenotypes
 
-    **PRIORITIZE fetching articles and selective structured data**:
-    1. **HIGHEST PRIORITY**: articles, variants, drugs, diseases
-       - **Articles**: Often provide FULL TEXT with detailed methodology, results, and discussion sections
-       - Variants: clinical significance, allele frequencies, pathogenicity scores
-       - Drugs: mechanisms, indications, pharmacology, interactions
-       - Diseases: definitions, synonyms, phenotypes, ontology relationships
+    Important:
+        - Pass the 'id' field from biodomain_search results WITHOUT adding prefixes
+        - Articles are prioritized - they often contain full text with comprehensive details
+        - Long article content is automatically summarized to focus on the research topic
+        - Domain is auto-detected from ID format if not specified
 
-    2. **LOW PRIORITY / DISCOURAGED**: trials, genes
-       - **Trials**: Rarely contain critical outcomes data; limited value beyond search results
-       - **Genes**: biodomain_search already returns sufficient gene information; no additional value from fetch
-
-    **When to fetch articles:**
-    - ✓ Articles have HIGH chance of returning full text with critical details
-    - ✓ Full methodology, results, and discussion sections often available
-    - ✓ Provides comprehensive information beyond abstracts
-    - ✓ Should be prioritized for detailed research needs
-
-    ## ⚠️ IMPORTANT: ID FORMAT RULES
-
-    **DO NOT add prefixes to IDs.** Use the exact 'id' value from search results.
-
-    ### CORRECT Examples:
-    ```
-    # Article (numeric PMID only)
-    biodomain_fetch(id="35271234", domain="article")
-
-    # Article (DOI format)
-    biodomain_fetch(id="10.1101/2024.01.20.23288905", domain="article")
-
-    # Clinical Trial (NCT prefix is part of the ID)
-    biodomain_fetch(id="NCT04280705", domain="trial")
-
-    # Variant (rsID)
-    biodomain_fetch(id="rs121913254", domain="variant")
-
-    # Gene (symbol or numeric Entrez ID)
-    biodomain_fetch(id="BRAF", domain="gene")
-    biodomain_fetch(id="673", domain="gene")
-    ```
-
-    ### ❌ WRONG Examples:
-    ```
-    # DO NOT add "PMID" prefix
-    biodomain_fetch(id="PMID35271234", domain="article")  # WRONG!
-
-    # DO NOT add "GENE" prefix
-    biodomain_fetch(id="GENE673", domain="gene")  # WRONG!
-
-    # DO NOT add "rsID" prefix
-    biodomain_fetch(id="rsID121913254", domain="variant")  # WRONG!
-    ```
-
-    ## IDENTIFIER FORMATS BY DOMAIN:
-    - **article**: Numeric PMID (e.g., "35271234") OR DOI (e.g., "10.1101/2024.01.20.23288905")
-    - **trial**: NCT ID with prefix (e.g., "NCT04280705")
-    - **variant**: rsID (e.g., "rs121913254") OR HGVS notation (e.g., "chr7:g.140453136A>T")
-    - **gene**: Gene symbol (e.g., "BRAF") OR numeric Entrez ID (e.g., "673")
-    - **drug**: Drug name (e.g., "imatinib") OR DrugBank ID (e.g., "DB00619")
-    - **disease**: Disease name (e.g., "melanoma") OR ontology ID (e.g., "MONDO:0005105")
-    - **nci_organization**: NCI organization ID (e.g., "NCI-2011-03337")
-    - **nci_intervention**: NCI intervention ID (e.g., "INT123456")
-    - **nci_disease**: NCI disease code (e.g., "C4872")
-    - **fda_adverse**: Safety report ID
-    - **fda_label**: Drug label set ID
-    - **fda_device**: Device report key
-    - **fda_approval**: Application number
-    - **fda_recall**: Recall number
-    - **fda_shortage**: Drug name
+    Examples:
+        biodomain_fetch(id="35271234", domain="article", research_topic="auto")  # Fetch article by PMID
+        biodomain_fetch(id="NCT04280705", domain="trial", research_topic="auto")  # Fetch trial by NCT ID
+        biodomain_fetch(id="rs121913254", domain="variant", research_topic="auto")  # Fetch variant by rsID
     """
     # Normalize ID by stripping common incorrect prefixes that LLMs might add
     original_id = id
@@ -689,9 +643,8 @@ async def biodomain_fetch(  # noqa: C901
                 f"Article content length ({len(text_content)} chars) exceeds threshold "
                 f"({SUMMARIZATION_THRESHOLD} chars). Applying summarization."
             )
-            # Extract research topic from the article title as a fallback
-            # In a real scenario, this might be passed as a parameter to biodomain_fetch
-            research_topic = article.get("title", "biomedical research")
+            # Use the injected research_topic from ResearcherState
+            # This provides better context for summarization than using article title
 
             # Summarize the content
             text_content = await summarize_article_content(
